@@ -54,7 +54,7 @@ The Netlify project is configured by `netlify.toml`: build `npm run build`, publ
 
 1. **Connect the repository.** In Netlify: *Project configuration → Build & deploy → Link repository* (or *Add new project → Import an existing project*), choose GitHub and this repository, branch `main`. Netlify reads `netlify.toml`; leave the build settings as they are.
 2. **Environment variables** (*Project configuration → Environment variables*, scope **Functions**):
-   - `SESSION_SECRET` — 48+ random characters (mark as secret).
+   - `SESSION_SECRET` — optional on Netlify: if it isn't set, the server creates a random key once and keeps it in the database. Set it (48+ random characters, marked secret) if you prefer to manage it yourself.
    - `PUBLIC_ORIGIN` — the site address, e.g. `https://ma3ak-events.netlify.app` (add your own domain later, comma-separated).
    - `ADMIN_EMAIL` — the admin email.
    - `ADMIN_PASSWORD` — a strong password (12+ characters, letters and numbers). Used **once** to create the first admin; delete it after you sign in.

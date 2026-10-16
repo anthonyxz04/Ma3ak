@@ -43,7 +43,8 @@ export const config = {
 
 export function assertConfig() {
   const problems = [];
-  if (config.sessionSecret.length < 32) problems.push('SESSION_SECRET must be at least 32 random characters.');
+  // On Netlify the key can come from the database instead (generated once, see app.js), so it isn't required there.
+  if (config.sessionSecret.length < 32 && !config.onNetlify) problems.push('SESSION_SECRET must be at least 32 random characters.');
   if (config.isProd && !config.onNetlify && !config.allowedOrigins.length) problems.push('PUBLIC_ORIGIN is required in production (e.g. https://ma3ak.com).');
   if (problems.length) {
     if (config.onNetlify) throw Object.assign(new Error('Server setup incomplete: ' + problems.join(' ')), { setup: true });

@@ -25,6 +25,7 @@ export function getApp() { return ready || (ready = build().catch(e => { ready =
 async function build() {
   assertConfig();
   const db = await openDb();
+  if (config.sessionSecret.length < 32) config.sessionSecret = await storedSecret(db, 'session');
   useRateLimitStore(db);
   await firstAdmin(db);
   const track = makeTracker(db), guard = adminGuard(db);
@@ -49,6 +50,13 @@ async function build() {
     return true;
   }
   return { db, handle };
+}
+
+// A random key created once and kept in the database (used when SESSION_SECRET isn't configured).
+export async function storedSecret(db, k) {
+  const { randomBytes } = await import('node:crypto');
+  await db.run('INSERT INTO app_secrets (k, v, created_at) VALUES (?,?,?) ON CONFLICT (k) DO NOTHING', k, randomBytes(36).toString('base64url'), new Date().toISOString());
+  return (await db.get('SELECT v FROM app_secrets WHERE k = ?', k)).v;
 }
 
 // First admin account, created from ADMIN_EMAIL + ADMIN_PASSWORD only when no admin exists yet.
