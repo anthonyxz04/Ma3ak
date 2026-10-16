@@ -203,10 +203,10 @@ const HowItWorks = {
     const faqs = [
       ['Does MA3AK set vendor prices?','No. Vendors publish their own prices, packages, availability, and terms. MA3AK organizes that information so you can compare options side by side and see how each one affects your budget.'],
       ['Is MA3AK only for weddings?','No. MA3AK is built for every kind of event: birthdays, graduations, engagements, corporate events, private parties, baby showers, bachelor and bachelorette parties, beach and outdoor events, and more.'],
-      ['How does the budget planner work?','You set a total budget and pick the services you need. MA3AK suggests a starting split and keeps 10% aside for surprises. Change any line to match real quotes, and you’ll always see the total, what’s left, and ways back if you go over.'],
-      ['Can I book vendors through MA3AK?','You can send booking requests to vendors through MA3AK, and they reply to you directly. Online booking, payments, and digital contracts are planned for later.'],
+      ['How does the budget planner work?','Create a plan with your event details and budget, then add packages from providers. The total updates as you go, per-guest prices follow your guest count, and you’ll see cheaper options if you go over. Prices are estimates until the provider confirms them in a quote.'],
+      ['Can I book vendors through MA3AK?','You can send quote requests to providers through MA3AK. They reply with a price and tell you if your date is free, and you see the answer in your dashboard. You can also send your whole plan to the MA3AK team. Online payments and digital contracts are planned for later.'],
       ['Which areas does MA3AK cover?','MA3AK is focused on Lebanon: Beirut, Metn, Keserwan, Jbeil, Batroun, Aley, Chouf, Bekaa, North Lebanon, and South Lebanon.'],
-      ['I’m a vendor. How do I join?','Apply on the For Vendors page. We’ll get in touch to set up your profile with your own services, packages, prices, and photos.']
+      ['I’m a provider. How do I join?','Create a partner account, add your packages, prices and photos, and submit your listing. MA3AK reviews every listing before it goes live.']
     ];
     const details = [
       ['Tell Us Your Plan','Pick the kind of event, then add your budget, guest count, area, date, and style. Choose the services you need, or start from the ones MA3AK suggests for your event type.'],

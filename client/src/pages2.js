@@ -129,9 +129,9 @@ const About = {
     <section class="section"><div class="wrap">
       ${SectionHeader({ title:'What we’re building next', lede:'These features are planned and not live yet.' })}
       <div class="roadmap">
-        <div><span class="tag">Planned</span><h3 class="h3" style="margin-top:.8rem">For people planning</h3><ul><li>User accounts</li><li>Guest invitations and RSVP</li><li>Seating plans</li><li>AI event assistant</li><li>AI theme ideas</li><li>Personalized recommendations</li></ul></div>
-        <div><span class="tag">Planned</span><h3 class="h3" style="margin-top:.8rem">For vendors</h3><ul><li>Vendor accounts</li><li>Live availability</li><li>Vendor analytics</li><li>Vendor subscriptions</li></ul></div>
-        <div><span class="tag">Planned</span><h3 class="h3" style="margin-top:.8rem">Booking</h3><ul><li>Online booking</li><li>Payments</li><li>Digital contracts</li><li>Notifications</li></ul></div>
+        <div><span class="tag">Planned</span><h3 class="h3" style="margin-top:.8rem">For people planning</h3><ul><li>Reviews from customers who booked</li><li>Personalized recommendations</li><li>Live availability calendars</li></ul></div>
+        <div><span class="tag">Planned</span><h3 class="h3" style="margin-top:.8rem">For providers</h3><ul><li>Provider analytics</li><li>Calendar sync</li><li>Provider subscriptions</li></ul></div>
+        <div><span class="tag">Planned</span><h3 class="h3" style="margin-top:.8rem">Booking</h3><ul><li>Online booking</li><li>Payments</li><li>Digital contracts</li></ul></div>
       </div>
     </div></section>
     ${CtaBand()}`;
