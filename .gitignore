@@ -1,0 +1,17 @@
+# dependencies and build output
+node_modules/
+.netlify/
+# local data, uploads and databases
+data/
+*.db
+*.sqlite
+# secrets — never commit real values (use .env.example as the template)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# logs and OS files
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,20 @@
+{
+  "name": "ma3ak",
+  "version": "2.0.0",
+  "private": true,
+  "description": "MA3AK — event planning in Lebanon: budget planner, provider marketplace, partner portal, 3D designer and admin. Runs on Netlify (Functions + Netlify Database + Blobs).",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "create-admin": "node scripts/create-admin.js",
+    "seed:generate": "node scripts/make-seed.js",
+    "test": "node --test test/smoke.test.js test/platform.test.js test/marketplace.test.js"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.0.0",
+    "@netlify/database": "*"
+  }
+}
