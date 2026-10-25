@@ -3,6 +3,8 @@
    ========================================================= */
 const ICONS = {
   search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  flag:'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/>',
   menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
   x:'<path d="M18 6 6 18M6 6l12 12"/>',
   instagram:'<rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><path d="M17.5 6.5h.01"/>',
@@ -133,11 +135,11 @@ function VendorCard(v){
   return `<article class="vendor-card">
     <div class="vc-img">${photo ? `<img src="${esc(photo.src)}" alt="${esc(photo.alt||v.name)}" loading="lazy" decoding="async">` : `<div class="ph">${icon('image')}</div>`}</div>
     <div class="vc-body">
-      <span class="tag">${esc(catSingle(v.category))}</span>${v.isDemo ? ' <span class="tag demo-tag" title="A sample listing for trying the planner. Not a real business; prices are illustrative.">Demo listing</span>' : ''}${v.verified ? ` <span class="tag gold">${icon('check','sm')}Verified</span>` : ''}
+      <span class="tag">${esc(catSingle(v.category))}</span>${v.isDemo ? ' <span class="tag demo-tag" title="A sample listing for trying the planner. Not a real business; prices are illustrative.">Demo listing</span>' : ''}${v.verified ? ` <span class="tag gold">${icon('check','sm')}Verified</span>` : ''}${v.sponsored ? ' <span class="tag sponsored-tag" title="Paid placement. It doesn’t affect verification.">Sponsored</span>' : ''}
       <h3 class="h3">${esc(v.name)}</h3>
       <div class="vc-meta"><span>${icon('pin','sm')}${esc(loc)}</span>${v.rating!=null?`<span>${icon('star','sm')}${v.rating.toFixed(1)} (${v.reviewCount})</span>`:''}</div>
       <p class="muted small">${esc(v.description||'')}</p>
-      ${v.startingPrice!=null?`<p class="vc-price">From <b>${money(v.startingPrice)}</b>${({ per_guest:' / guest', per_hour:' / hour', per_item:' each' })[v.startingUnit] || ''}${v.isDemo ? ' <small class="muted">(illustrative)</small>' : ''}</p>`:`<p class="vc-price muted">Price on request</p>`}
+      ${v.startingFrom?`<p class="vc-price"><b>${esc(fromTxt(v))}</b>${v.isDemo ? ' <small class="muted">(illustrative)</small>' : ''}</p>`:`<p class="vc-price muted">Custom quote</p>`}
       <div class="vc-actions"><a class="btn btn-ghost btn-sm" href="#/vendor/${esc(v.id)}">View profile</a><button class="btn btn-primary btn-sm" data-add-vendor="${esc(v.id)}">Add to plan</button></div>
     </div></article>`;
 }
