@@ -6,7 +6,7 @@ export const status = () => ({
   whatsapp: { configured: !!(config.waToken && config.waPhoneId && config.waTo && config.waTemplate), provider: 'WhatsApp Cloud API (Meta)', needs: ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_BUSINESS_TO', 'WHATSAPP_TEMPLATE'] },
   ai: { configured: !!(config.aiProvider === 'mock' || (config.aiProvider && config.aiKey && (config.aiProvider !== 'openai' || config.aiModel))), provider: config.aiProvider || 'none', needs: ['AI_PROVIDER', 'AI_API_KEY', 'AI_MODEL (required for openai)'] },
   google: { configured: !!(config.googleClientId && config.googleClientSecret), provider: 'Google OAuth', needs: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] },
-  payments: { configured: false, provider: 'Stripe (planned)', needs: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] },
+  payments: { configured: false, provider: 'Online payments (not connected — see docs/payments-lebanon.md)', needs: ['A merchant account with a provider that serves Lebanon (e.g. Whish Pay, areeba)', 'Its sandbox and live API keys'] },
   instagram: { configured: false, provider: 'Meta Instagram API (planned)', needs: ['Instagram Business account + Meta app review'] },
 });
 
