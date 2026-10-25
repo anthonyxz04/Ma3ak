@@ -8,6 +8,7 @@ import { token, sha256, originAllowed, rateLimit, clientIp, ipHash } from './sec
 import { entitlements } from './plans.js';
 import { config } from './config.js';
 import { loadServices, planCore, lineOut, totals } from './planner.js';
+import { feeRules } from './billing.js';
 
 const META = ['_add', '_ov'];
 async function access(db, eventId, user) {
@@ -47,12 +48,14 @@ export async function readState(db, eventId) {
   return s;
 }
 const summaryOf = e => ({ id: e.id, name: e.name, event_type: e.event_type, event_date: e.event_date, venue: e.venue, location: e.location, setting: e.setting, guest_count: e.guest_count, budget: e.budget, style: e.style, status: e.status, progress: e.progress, rev: e.rev, updated_at: e.updated_at, created_at: e.created_at,
-  ...(e.services !== undefined ? { services: e.services, est_low: e.est_low, est_high: e.est_high, quote_items: e.quote_items, has_design: !!e.has_design } : {}) });
+  currency: e.currency || 'USD', ...(e.services !== undefined ? { services: e.services, est_low_minor: e.est_low, est_high_minor: e.est_high, quote_items: e.quote_items, other_currency_items: e.other_currency_items, has_design: !!e.has_design } : {}) });
 // Estimated totals for the dashboard (same rule as the planner: per-guest lines follow the guest count).
+// Amounts are in minor units of the plan's currency; lines in other currencies are counted separately (no exchange rates).
 const TOTALS = `(SELECT COUNT(*) FROM event_services s WHERE s.event_id = e.id) AS services,
-  (SELECT SUM(s.unit_price * COALESCE(s.quantity, CASE WHEN s.unit = 'per_guest' THEN COALESCE(e.guest_count, 0) ELSE 1 END)) FROM event_services s WHERE s.event_id = e.id) AS est_low,
-  (SELECT SUM(COALESCE(s.price_max, s.unit_price) * COALESCE(s.quantity, CASE WHEN s.unit = 'per_guest' THEN COALESCE(e.guest_count, 0) ELSE 1 END)) FROM event_services s WHERE s.event_id = e.id) AS est_high,
-  (SELECT COUNT(*) FROM event_services s WHERE s.event_id = e.id AND s.unit_price IS NULL) AS quote_items,
+  (SELECT SUM(s.unit_price_minor * COALESCE(s.quantity, CASE WHEN s.unit = 'per_guest' THEN COALESCE(e.guest_count, 0) ELSE 1 END)) FROM event_services s WHERE s.event_id = e.id AND s.currency = e.currency AND s.price_type <> 'quote') AS est_low,
+  (SELECT SUM(COALESCE(s.price_max_minor, s.unit_price_minor) * COALESCE(s.quantity, CASE WHEN s.unit = 'per_guest' THEN COALESCE(e.guest_count, 0) ELSE 1 END)) FROM event_services s WHERE s.event_id = e.id AND s.currency = e.currency AND s.price_type <> 'quote') AS est_high,
+  (SELECT COUNT(*) FROM event_services s WHERE s.event_id = e.id AND (s.unit_price_minor IS NULL OR s.price_type = 'quote')) AS quote_items,
+  (SELECT COUNT(*) FROM event_services s WHERE s.event_id = e.id AND s.currency <> e.currency) AS other_currency_items,
   EXISTS (SELECT 1 FROM event_selections x WHERE x.event_id = e.id) AS has_design`;
 function coreFrom(b, s) {
   const n = v => Number.isFinite(+v) && +v > 0 ? Math.min(1e8, Math.round(+v)) : null;
@@ -132,14 +135,14 @@ export function eventRoutes(db, track) {
     'POST /api/events/:id/shares': async (req, res, _db, url, id) => {
       const u = await requireUser(req, res, db, { write: true }); if (!u) return; const a = await access(db, id, u); if (!a || a.role !== 'owner') return fail(res, 404, 'Event not found.');
       const b = await body(req, res, 2048); if (!b) return; const perm = b.permission === 'edit' ? 'edit' : 'view', days = Math.max(1, Math.min(365, Number(b.days) || 30));
-      const t = token(32), sid = uid(), exp = new Date(Date.now() + days * 864e5).toISOString();
-      (await db.run('INSERT INTO shares (id, token_hash, event_id, permission, created_at, expires_at) VALUES (?,?,?,?,?,?)', sid, sha256(t), a.e.id, perm, now(), exp));
+      const t = token(32), sid = uid(), exp = new Date(Date.now() + days * 864e5).toISOString(), opt = k => b[k] === false ? 0 : 1;
+      (await db.run('INSERT INTO shares (id, token_hash, event_id, permission, created_at, expires_at, show_prices, show_providers, show_date) VALUES (?,?,?,?,?,?,?,?,?)', sid, sha256(t), a.e.id, perm, now(), exp, opt('showPrices'), opt('showProviders'), opt('showDate')));
       track('event_shared', { permission: perm }, u.id);
-      sendJson(res, 201, { ok: true, share: { id: sid, permission: perm, expires_at: exp, url: `${config.allowedOrigins[0] || `http://${req.headers.host}`}/#/s/${t}` } });
+      sendJson(res, 201, { ok: true, share: { id: sid, permission: perm, expires_at: exp, show_prices: opt('showPrices'), show_providers: opt('showProviders'), show_date: opt('showDate'), url: `${config.allowedOrigins[0] || `http://${req.headers.host}`}/#/s/${t}` } });
     },
     'GET /api/events/:id/shares': async (req, res, _db, url, id) => {
       const u = await requireUser(req, res, db); if (!u) return; const a = await access(db, id, u); if (!a || a.role !== 'owner') return fail(res, 404, 'Event not found.');
-      sendJson(res, 200, { ok: true, shares: (await db.all('SELECT id, permission, created_at, expires_at, revoked, views FROM shares WHERE event_id = ? ORDER BY created_at DESC', a.e.id)), members: (await db.all('SELECT u.name, u.email, m.role FROM event_members m JOIN users u ON u.id = m.user_id WHERE m.event_id = ?', a.e.id)) });
+      sendJson(res, 200, { ok: true, shares: (await db.all('SELECT id, permission, created_at, expires_at, revoked, views, show_prices, show_providers, show_date FROM shares WHERE event_id = ? ORDER BY created_at DESC', a.e.id)), members: (await db.all('SELECT u.name, u.email, m.role FROM event_members m JOIN users u ON u.id = m.user_id WHERE m.event_id = ?', a.e.id)) });
     },
     'DELETE /api/events/:id/shares/:sid': async (req, res, _db, url, id, sid) => {
       const u = await requireUser(req, res, db, { write: true }); if (!u) return; const a = await access(db, id, u); if (!a || a.role !== 'owner') return fail(res, 404, 'Event not found.');
@@ -153,10 +156,17 @@ export function eventRoutes(db, track) {
       (await db.run('UPDATE shares SET views = views + 1 WHERE id = ?', s.id));
       const e = (await db.get('SELECT e.*, u.name AS owner FROM events e JOIN users u ON u.id = e.user_id WHERE e.id = ?', s.event_id));
       const st = await readState(db, e.id); delete st._photo; for (const k of ['fullName', 'phone', 'email', 'notes']) delete st[k];
-      // Budget plan, without private notes, requirements or anyone's contact details.
-      const services = await loadServices(db, e.id), core = planCore(e); delete core.notes; delete core.requirements;
-      sendJson(res, 200, { ok: true, permission: s.permission, event: { ...summaryOf(e), owner: (e.owner || '').split(' ')[0] }, state: st,
-        plan: { ...core, services: services.map(x => { const l = lineOut(x, e.guest_count); delete l.note; return l; }), totals: totals(services, e) } });
+      // Budget plan, without private notes, requirements, bookings, payments or anyone's contact details.
+      // The owner chooses whether prices, provider names and the date are included.
+      const [services, rules] = await Promise.all([loadServices(db, e.id), feeRules(db)]), core = planCore(e); delete core.notes; delete core.requirements;
+      const summary = { ...summaryOf(e), owner: (e.owner || '').split(' ')[0] };
+      if (!s.show_date) { core.date = null; core.time = null; summary.event_date = null; delete st.date; }
+      if (!s.show_prices) { core.budget = null; summary.budget = null; delete summary.est_low_minor; delete summary.est_high_minor; delete st.budget; }
+      const lines = services.map(x => { const l = lineOut(x, e.guest_count); delete l.note; delete l.booking; if (l.agreed) l.agreed = s.show_prices ? { totalMinor: l.agreed.totalMinor, currency: l.agreed.currency } : { hidden: true };
+        if (!s.show_prices) { for (const k of ['unitPriceMinor', 'priceMaxMinor', 'lineLowMinor', 'lineHighMinor', 'discountMinor', 'currentPrice']) l[k] = null; }
+        if (!s.show_providers) { l.vendorName = null; l.vendorId = null; l.packageId = null; } return l; });
+      sendJson(res, 200, { ok: true, permission: s.permission, shows: { prices: !!s.show_prices, providers: !!s.show_providers, date: !!s.show_date }, event: summary, state: st,
+        plan: { ...core, services: lines, totals: s.show_prices ? totals(services, e, rules) : null } });
     },
     'POST /api/share/:token/join': async (req, res, _db, url, t) => {
       const u = await requireUser(req, res, db, { write: true }); if (!u) return;

@@ -7,7 +7,7 @@ import { rateLimit, clientIp, ipHash, hashPassword, verifyPassword, dummyVerify,
 import { check, clean } from './validate.js';
 import { sendEmail, emailHtml, status } from './integrations.js';
 import { entitlements } from './plans.js';
-import { removeImage } from './storage.js';
+import { removeImage, removeDocument } from './storage.js';
 
 export const USER_COOKIE = config.isProd ? '__Host-ma3ak_user' : 'ma3ak_user';
 const cookie = (v, age) => `${USER_COOKIE}=${v}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${config.isProd ? '; Secure' : ''}`;
@@ -91,15 +91,26 @@ export function userRoutes(db, track) {
     'DELETE /api/me': async (req, res) => {
       const u = await requireUser(req, res, db, { write: true }); if (!u) return; const b = await body(req, res); if (!b) return;
       if (u.pass_hash ? !verifyPassword(String(b.password || ''), u.pass_hash) : b.confirm !== 'DELETE') return fail(res, 422, u.pass_hash ? 'Enter your password to confirm.' : 'Type DELETE to confirm.', { fields: { password: 'Incorrect.' } });
+      // Bookings in progress involve another party and possibly money: they must be finished or cancelled first.
+      const ACTIVE = "('awaiting_payment','confirmed','in_progress','cancellation_requested')";
+      if (await db.get(`SELECT 1 FROM bookings WHERE user_id = ? AND status IN ${ACTIVE}`, u.id)) return fail(res, 409, 'You have bookings in progress. Cancel them or wait until they are completed, then delete your account.', { code: 'active_bookings' });
+      if (u.role === 'partner' && await db.get(`SELECT 1 FROM bookings b JOIN vendors v ON v.id = b.vendor_id WHERE v.owner_user_id = ? AND b.status IN ${ACTIVE}`, u.id)) return fail(res, 409, 'Your listing has bookings in progress. Complete or cancel them first, or contact MA3AK.', { code: 'active_bookings' });
+      const docs = u.role === 'partner' ? await db.all('SELECT d.id, d.mime FROM vendor_documents d JOIN vendors v ON v.id = d.vendor_id WHERE v.owner_user_id = ?', u.id) : [];
       const files = [...(await db.all('SELECT f.id FROM files f JOIN requests r ON r.id = f.request_id WHERE r.user_id = ?', u.id)), ...(await db.all('SELECT i.cover_id AS id FROM invitations i JOIN events e ON e.id = i.event_id WHERE e.user_id = ? AND i.cover_id IS NOT NULL', u.id))];
       if (u.role === 'partner') files.push(...(await db.all('SELECT p.id FROM vendor_photos p JOIN vendors v ON v.id = p.vendor_id WHERE v.owner_user_id = ?', u.id)));
       await tx(db, async (db) => {
         if (u.role === 'partner') await db.run('DELETE FROM vendors WHERE owner_user_id = ?', u.id); // a partner's own listing goes with the account
         (await db.run('DELETE FROM requests WHERE user_id = ?', u.id));
+        // Booking records stay for the other party and for accounting, without this person's contact details.
+        await db.run("UPDATE bookings SET customer_email = NULL, customer_phone = NULL, address = '', updated_at = ? WHERE user_id = ?", now(), u.id);
+        await db.run("UPDATE booking_offers SET status = 'withdrawn' WHERE status = 'sent' AND booking_id IN (SELECT id FROM bookings WHERE user_id = ?)", u.id);
+        await db.run("INSERT INTO booking_events (booking_id, at, actor_type, action, from_status, to_status, note) SELECT id, ?, 'system', 'customer_account_deleted', status, 'cancelled', 'Customer account deleted' FROM bookings WHERE user_id = ? AND status IN ('draft','quote_requested','quote_received','revision_requested','awaiting_vendor')", now(), u.id);
+        await db.run("UPDATE bookings SET status = 'cancelled', cancelled_at = ?, cancel_reason = 'Customer account deleted', updated_at = ? WHERE user_id = ? AND status IN ('draft','quote_requested','quote_received','revision_requested','awaiting_vendor')", now(), now(), u.id);
         (await db.run('UPDATE analytics SET user_id = NULL WHERE user_id = ?', u.id));
         (await db.run('DELETE FROM users WHERE id = ?', u.id)); // cascades to sessions, events, versions, shares, favorites, chats
       });
       for (const f of files) await removeImage(f.id);
+      for (const d of docs) await removeDocument(d.id, d.mime);
       sendJson(res, 200, { ok: true }, { 'Set-Cookie': cookie('', 0) });
     },
     'POST /api/auth/verify': async (req, res) => {

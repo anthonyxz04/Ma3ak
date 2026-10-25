@@ -5,6 +5,8 @@ import { sendJson, fail, readJson } from './http.js';
 import { clean } from './validate.js';
 import { audit } from './audit.js';
 import { clearCategoryCache } from './vendors.js';
+import { CURRENCIES, isCurrency, toMinor } from './money.js';
+import { CATEGORY_FIELDS } from './fields.js';
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const str = (v, max) => clean(typeof v === 'string' ? v : '', max);
@@ -24,6 +26,16 @@ const SCHEMA = {
   themes: v => arr(v, 24).map(x => ({ id: str(x?.id, 40).toLowerCase().replace(/[^a-z0-9-]/g, '') || str(x?.name, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-'), name: str(x?.name, 60), description: str(x?.description, 200), colors: arr(x?.colors, 5).filter(c => HEX.test(c)) })).filter(x => x.name && x.id),
   announcement: v => { v = obj(v); return { active: v.active === true, text: str(v.text, 200) }; },
   currency: v => ['USD', 'EUR', 'LBP'].includes(v) ? v : 'USD',
+  // Fees charged to customers on top of the provider's price. Always shown before the customer accepts. Empty = none.
+  customerFees: v => arr(v, 5).map(x => {
+    const label = str(x?.label, 60); if (!label) throw new Error('Give each fee a name customers will understand.');
+    if (x?.type === 'percent') { const bps = Number.isInteger(x.bps) ? x.bps : Math.round(Number(String(x.percent ?? '').replace(',', '.')) * 100); if (!Number.isInteger(bps) || bps < 1 || bps > 3000) throw new Error('A percentage fee must be between 0.01% and 30%.'); return { label, type: 'percent', bps }; }
+    if (x?.type === 'flat') { const currency = isCurrency(x.currency) ? x.currency : 'USD', amountMinor = Number.isInteger(x.amountMinor) ? x.amountMinor : toMinor(x.amount, currency); if (!Number.isInteger(amountMinor) || amountMinor <= 0) throw new Error('Enter the fee amount.'); return { label, type: 'flat', currency, amountMinor }; }
+    throw new Error('Choose percentage or flat fee.'); }),
+  listingSort: v => { v = obj(v); return { sponsoredFirst: v.sponsoredFirst === true, auto: ['quality', 'rating', 'newest', 'name'].includes(v.auto) ? v.auto : 'quality' }; },
+  bookingPolicy: v => { v = obj(v); const n = (x, lo, hi, d) => { const k = Number(x); return Number.isInteger(k) ? Math.max(lo, Math.min(hi, k)) : d; };
+    return { offerValidityDays: n(v.offerValidityDays, 1, 90, 14), reviewWindowDays: n(v.reviewWindowDays, 7, 730, 180), defaultCancellationTerms: str(v.defaultCancellationTerms, 2000) || 'No special cancellation terms were set by the provider. Ask them before you accept if this matters to you.' }; },
+  vendorTerms: v => { v = obj(v); const version = str(v.version, 40), text = clean(typeof v.text === 'string' ? v.text : '', 20000); if (!version || !text) throw new Error('Enter a version and the text of the terms.'); return { version, text }; },
 };
 export const SETTING_KEYS = Object.keys(SCHEMA);
 
@@ -40,15 +52,18 @@ export function siteRoutes(db, guard) {
       const [settings, categories] = await Promise.all([readSettings(db), db.all(`SELECT c.id, c.name, c.single, c.icon, c.blurb, c.sort,
         (SELECT COUNT(*) FROM vendors v WHERE v.category = c.id AND v.status = 'approved' AND v.active = 1 AND v.consent_at IS NOT NULL) AS providers
         FROM categories c WHERE c.active = 1 ORDER BY c.sort, c.name`)]);
-      sendJson(res, 200, { ok: true, settings, categories });
+      const plans = await db.all('SELECT id, name, price_minor, currency, billing_interval, entitlements, description FROM vendor_plans WHERE active = 1 ORDER BY sort');
+      sendJson(res, 200, { ok: true, settings, categories, fields: CATEGORY_FIELDS, currencies: CURRENCIES, timeZone: 'Asia/Beirut',
+        vendorPlans: plans.map(p => ({ ...p, entitlements: JSON.parse(p.entitlements || '{}') })), payments: { online: false } });
     },
     'GET /api/admin/settings': async (req, res) => { if (!await guard(req, res)) return; sendJson(res, 200, { ok: true, settings: await readSettings(db), keys: SETTING_KEYS }); },
     'PUT /api/admin/settings/:key': async (req, res, _db, url, key) => {
       const s = await guard(req, res, true); if (!s) return; if (!SCHEMA[key]) return fail(res, 404, 'Unknown setting.');
       let b; try { b = await readJson(req, 128e3); } catch (e) { return fail(res, e.status || 400, e.message); }
       let value; try { value = SCHEMA[key](b.value); } catch (e) { return fail(res, 422, e.message); }
+      if (key === 'vendorTerms') { const prev = (await readSettings(db)).vendorTerms; if (prev && prev.version === value.version && prev.text !== value.text) return fail(res, 422, 'Change the version when you change the text, so providers are asked to accept the new terms.'); }
       await db.run('INSERT INTO site_settings (key, value, updated_at, updated_by) VALUES (?,?,?,?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by', key, JSON.stringify(value), now(), s.admin_id);
-      await audit(db, s, 'setting_updated', key); sendJson(res, 200, { ok: true, value });
+      await audit(db, s, 'setting_updated', key, key === 'customerFees' || key === 'listingSort' || key === 'bookingPolicy' ? JSON.stringify(value).slice(0, 400) : key === 'vendorTerms' ? `version ${value.version}` : null); sendJson(res, 200, { ok: true, value });
     },
     'GET /api/admin/categories': async (req, res) => {
       if (!await guard(req, res)) return;
@@ -78,12 +93,13 @@ export function siteRoutes(db, guard) {
     'GET /api/admin/overview': async (req, res) => {
       if (!await guard(req, res)) return;
       const n = async (sql, ...a) => (await db.get(sql, ...a)).n;
-      const [customers, partners, pending, published, demo, plans, finalized, quotesNew, quotesAll, requestsNew, aiChats, newUsers7] = await Promise.all([
-        n("SELECT COUNT(*) AS n FROM users WHERE role = 'customer'"), n("SELECT COUNT(*) AS n FROM users WHERE role = 'partner'"), n("SELECT COUNT(*) AS n FROM vendors WHERE status = 'pending'"),
+      const [customers, partners, pending, published, demo, plans, finalized, openRequests, bookingsAll, confirmed, requestsNew, aiChats, newUsers7, reportsOpen, disputed, planRequests] = await Promise.all([
+        n("SELECT COUNT(*) AS n FROM users WHERE role = 'customer'"), n("SELECT COUNT(*) AS n FROM users WHERE role = 'partner'"), n("SELECT COUNT(*) AS n FROM vendors WHERE status IN ('submitted','pending','under_review')"),
         n("SELECT COUNT(*) AS n FROM vendors WHERE status = 'approved' AND active = 1 AND consent_at IS NOT NULL AND is_demo = 0"), n('SELECT COUNT(*) AS n FROM vendors WHERE is_demo = 1'),
-        n('SELECT COUNT(*) AS n FROM events'), n("SELECT COUNT(*) AS n FROM events WHERE status = 'finalized'"), n("SELECT COUNT(*) AS n FROM quotes WHERE status = 'new'"), n('SELECT COUNT(*) AS n FROM quotes'),
-        n("SELECT COUNT(*) AS n FROM requests WHERE status = 'new'"), n('SELECT COUNT(*) AS n FROM ai_conversations'), n('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', new Date(Date.now() - 7 * 864e5).toISOString())]);
-      sendJson(res, 200, { ok: true, overview: { customers, partners, pending, published, demo, plans, finalized, quotesNew, quotesAll, requestsNew, aiChats, newUsers7 } });
+        n('SELECT COUNT(*) AS n FROM events'), n("SELECT COUNT(*) AS n FROM events WHERE status = 'finalized'"), n("SELECT COUNT(*) AS n FROM bookings WHERE status IN ('quote_requested','revision_requested','awaiting_vendor')"), n('SELECT COUNT(*) AS n FROM bookings'),
+        n("SELECT COUNT(*) AS n FROM bookings WHERE status IN ('confirmed','in_progress','completed')"), n("SELECT COUNT(*) AS n FROM requests WHERE status = 'new'"), n('SELECT COUNT(*) AS n FROM ai_conversations'), n('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', new Date(Date.now() - 7 * 864e5).toISOString()),
+        n("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"), n('SELECT COUNT(*) AS n FROM bookings WHERE disputed = 1'), n("SELECT COUNT(*) AS n FROM vendor_subscriptions WHERE status = 'requested'")]);
+      sendJson(res, 200, { ok: true, overview: { customers, partners, pending, published, demo, plans, finalized, openRequests, bookingsAll, confirmed, requestsNew, aiChats, newUsers7, reportsOpen, disputed, planRequests } });
     },
   };
 }

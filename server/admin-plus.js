@@ -4,6 +4,7 @@ import { sendJson, fail, readJson } from './http.js';
 import { clean, check } from './validate.js';
 import { readState } from './events.js';
 import { loadServices, lineOut, totals } from './planner.js';
+import { feeRules } from './billing.js';
 import { report } from './analytics.js';
 import { status } from './integrations.js';
 import { PLANS } from './plans.js';
@@ -30,13 +31,13 @@ export function adminPlusRoutes(db, guard) {
     'DELETE /api/admin/users/:id': async (req, res, _db, url, id) => { if (!await G(req, res, true)) return; (await db.run('UPDATE analytics SET user_id = NULL WHERE user_id = ?', String(id))); (await db.run('DELETE FROM users WHERE id = ?', String(id))); sendJson(res, 200, { ok: true }); },
     'GET /api/admin/events': async (req, res) => {
       if (!await G(req, res)) return;
-      sendJson(res, 200, { ok: true, rows: (await db.all(`SELECT e.id, e.name, e.event_type, e.event_date, e.venue, e.location, e.guest_count, e.budget, e.status, e.progress, e.updated_at, u.name AS owner, u.email,
+      sendJson(res, 200, { ok: true, rows: (await db.all(`SELECT e.id, e.name, e.event_type, e.event_date, e.venue, e.location, e.guest_count, e.budget, e.currency, e.status, e.progress, e.updated_at, u.name AS owner, u.email,
         (SELECT COUNT(*) FROM event_services s WHERE s.event_id = e.id) AS services FROM events e JOIN users u ON u.id = e.user_id ORDER BY e.updated_at DESC LIMIT 300`)) });
     },
     'GET /api/admin/events/:id': async (req, res, _db, url, id) => {
       if (!await G(req, res)) return; const e = (await db.get('SELECT e.*, u.name AS owner, u.email, u.phone FROM events e JOIN users u ON u.id = e.user_id WHERE e.id = ?', String(id))); if (!e) return fail(res, 404, 'Not found.');
       const services = await loadServices(db, e.id);
-      sendJson(res, 200, { ok: true, event: e, services: services.map(x => lineOut(x, e.guest_count)), totals: totals(services, e), state: await readState(db, e.id), versions: (await db.all('SELECT label, created_at FROM event_versions WHERE event_id = ? ORDER BY created_at DESC LIMIT 20', e.id)) });
+      sendJson(res, 200, { ok: true, event: e, services: services.map(x => lineOut(x, e.guest_count)), totals: totals(services, e, await feeRules(db)), state: await readState(db, e.id), versions: (await db.all('SELECT label, created_at FROM event_versions WHERE event_id = ? ORDER BY created_at DESC LIMIT 20', e.id)) });
     },
     'GET /api/admin/leads': async (req, res) => {
       if (!await G(req, res)) return;
