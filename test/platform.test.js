@@ -148,8 +148,8 @@ test('vendor marketplace: hidden until consent is recorded and the listing is on
   let pub = await (await fetch(BASE + '/api/vendors', { cache: 'no-store' })).json(); assert.equal(real(pub.vendors).length, 0, 'not public yet');
   assert.ok(pub.vendors.length > 0 && pub.vendors.every(x => x.isDemo && !x.verified), 'seeded demo providers are labelled and never verified');
   assert.equal((await adm('PUT', '/api/admin/vendors/cedar-sound', { ...v, consent: true, consentNote: 'Agreed by phone', active: false })).status, 200);
-  assert.equal((await adm('POST', '/api/admin/vendors/cedar-sound/review', { action: 'approve' })).status, 200);
-  assert.equal((await adm('POST', '/api/admin/vendors/cedar-sound/review', { action: 'verify' })).status, 200);
+  assert.equal((await adm('POST', '/api/admin/vendors/cedar-sound/review', { action: 'approve' })).status, 422, 'verification needs the checklist');
+  assert.equal((await adm('POST', '/api/admin/vendors/cedar-sound/review', { action: 'approve', checks: { identity: true, business: true, authority: true, listing: true } })).status, 200);
   pub = await (await fetch(BASE + '/api/vendors?x=1')).json(); const c = real(pub.vendors)[0];
   assert.equal(c.name, 'Cedar Sound'); assert.deepEqual(c.locations, ['beirut'], 'unknown areas dropped'); assert.equal(c.verified, true); assert.equal(c.packages[0].name, 'Night set'); assert.equal(c.startingPrice, 600);
   assert.equal((await A.req('PUT', '/api/admin/vendors/hack', v)).status, 401, 'customers cannot manage vendors');

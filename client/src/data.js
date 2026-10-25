@@ -203,7 +203,8 @@ function applyFilters(scored, f){
   const origin = byId(LOCATIONS, f.location || 'beirut');
   const nearest = v => Math.min(...(v.locations||[]).map(id => distanceKm(origin, byId(LOCATIONS,id))));
   const sorters = {
-    recommended: (a,b) => b.score - a.score || (b.v.verified?1:0) - (a.v.verified?1:0),
+    // equal relevance keeps the server's order (MA3AK's listing order: manual ranking, then the automatic rule)
+    recommended: (a,b) => b.score - a.score || VENDORS.indexOf(a.v) - VENDORS.indexOf(b.v),
     price: (a,b) => (a.v.startingPrice ?? Infinity) - (b.v.startingPrice ?? Infinity),
     'price-desc': (a,b) => (b.v.startingPrice ?? -1) - (a.v.startingPrice ?? -1),
     rating: (a,b) => (b.v.rating ?? -1) - (a.v.rating ?? -1),

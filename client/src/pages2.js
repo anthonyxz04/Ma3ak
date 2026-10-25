@@ -1,8 +1,8 @@
 /* =========================================================
    VENDOR PROFILE — template for real vendor data
    ========================================================= */
-function Calendar(unavailable=[]){
-  const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+function Calendar(unavailable=[], offset=0){
+  const now = new Date(), base = new Date(now.getFullYear(), now.getMonth() + offset, 1), y = base.getFullYear(), m = base.getMonth();
   const first = new Date(y, m, 1), days = new Date(y, m+1, 0).getDate(), lead = (first.getDay()+6)%7;
   const iso = d => `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   return `<p class="small muted" style="margin-bottom:.75rem">${first.toLocaleDateString('en-GB',{month:'long',year:'numeric'})}</p>
@@ -26,36 +26,41 @@ function VendorProfileView(v, { preview=false } = {}){
         <header>
           <span class="tag gold">${esc(c.single)}</span> ${preview ? '' : vBadges(v)}
           <h1 class="h1" style="margin-top:.75rem">${esc(v.name)}</h1>
-          ${v.isDemo ? `<p class="notice" style="margin-top:1rem">${icon('info')}<span>This is a <b>demo listing</b> so you can try the planner. It isn’t a real business and its prices are illustrative. Quote requests go to the MA3AK team.</span></p>` : ''}
+          ${v.isDemo ? `<p class="notice" style="margin-top:1rem">${icon('info')}<span>This is a <b>demo listing</b> so you can try the planner. It isn’t a real business, its prices are illustrative, and it can’t be booked.</span></p>` : ''}
+          ${v.sponsored ? `<p class="tiny muted" style="margin-top:.6rem">Sponsored: this provider pays for extra visibility. It doesn’t affect verification or reviews.</p>` : ''}
           <div class="vc-meta" style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:1rem;color:var(--muted)">
             ${locs?`<span style="display:inline-flex;gap:.4rem;align-items:center">${icon('pin','sm')}${esc(locs)}</span>`:''}
-            ${v.rating!=null?`<span style="display:inline-flex;gap:.4rem;align-items:center">${icon('star','sm')}${v.rating.toFixed(1)} from ${v.reviewCount} reviews</span>`:''}
+            ${v.rating!=null?`<span style="display:inline-flex;gap:.4rem;align-items:center">${icon('star','sm')}${v.rating.toFixed(1)} from ${v.reviewCount} verified booking${v.reviewCount === 1 ? '' : 's'}</span>`:''}
           </div>
         </header>
         <section style="margin-top:2.5rem;padding-top:0;border:0"><h2>About</h2><p class="muted" style="max-width:65ch">${esc(v.about || v.description || (preview ? 'Your description goes here. Tell planners what makes your service right for their event.' : 'This vendor hasn’t added a description yet.'))}</p></section>
         <section><h2>Services</h2>${(v.services||[]).length ? `<ul class="pill-list">${v.services.map(s => `<li class="tag">${esc(s)}</li>`).join('')}</ul>` : `<p class="muted">Services will be listed here by the vendor.</p>`}
           ${(v.eventTypes||[]).length ? `<p class="small muted" style="margin-top:1rem">Works with: ${v.eventTypes.map(evName).join(', ')}</p>` : ''}</section>
-        <section><h2>Packages and prices</h2>${(v.packages||[]).length ? `<div class="grid g-2">${v.packages.map(pk => `<div class="card pkg-card"><h3 class="h3">${esc(pk.name)}</h3><p class="kpi" style="margin-top:.6rem;font-size:1.5rem">${esc(priceTxt(pk.price, pk.priceMax, pk.unit))}</p>${pk.description ? `<p class="small muted">${esc(pk.description)}</p>` : ''}${(pk.includes||[]).length?`<ul class="small muted" style="margin:.8rem 0 0;padding-left:1.1rem">${pk.includes.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`:''}
-            ${preview ? '' : `<div class="chip-row" style="margin-top:1rem"><button class="btn btn-primary btn-sm" type="button" data-pkg-add="${esc(pk.id)}">${icon('plus','sm')}Add to plan</button><button class="btn btn-ghost btn-sm" type="button" data-pkg-quote="${esc(pk.id)}">${pk.price == null ? 'Request a quote' : 'Ask for a quote'}</button></div>`}</div>`).join('')}</div><p class="tiny muted" style="margin-top:.8rem">Prices are ${v.isDemo ? 'illustrative' : 'estimates published by the provider'}. The final price is confirmed in a quote.</p>` : `<p class="muted">This provider hasn’t listed packages yet. Ask them for a quote.</p>`}</section>
-        <section><h2>Availability</h2><p class="muted">${v.availabilityNote ? esc(v.availabilityNote) + ' ' : ''}Availability isn’t shown as a calendar. Send a quote request with your date and the provider will confirm if it’s free.</p></section>
+        <section><h2>Packages and prices</h2>${(v.packages||[]).length ? `<div class="grid g-2">${v.packages.map(pk => `<div class="card pkg-card"><p class="tiny muted">${esc(PRICE_TYPE_TXT[pk.priceType] || '')}</p><h3 class="h3">${esc(pk.name)}</h3><p class="kpi" style="margin-top:.4rem;font-size:1.5rem">${esc(pkgPrice(pk))}</p>${pk.description ? `<p class="small muted">${esc(pk.description)}</p>` : ''}
+            ${pkgDetailsHtml(pk, v.category)}
+            ${preview ? '' : `<div class="chip-row" style="margin-top:1rem">${v.isDemo ? '' : `<button class="btn btn-primary btn-sm" type="button" data-pkg-quote="${esc(pk.id)}">${icon('send','sm')}Request to book</button>`}<button class="btn btn-ghost btn-sm" type="button" data-pkg-add="${esc(pk.id)}">${icon('plus','sm')}Add to plan</button></div>`}</div>`).join('')}</div>
+            <p class="tiny muted" style="margin-top:.8rem">${v.isDemo ? 'Prices are illustrative.' : 'Fixed prices are the provider’s package price; starting prices and custom quotes are confirmed in a quote. Nothing is booked until you accept a quote and the provider confirms.'}</p>` : `<p class="muted">This provider hasn’t listed packages yet. Send a request for a custom quote.</p>`}</section>
+        <section><h2>Availability</h2><p class="muted">${v.availabilityNote ? esc(v.availabilityNote) + ' ' : ''}Dates the provider has marked as unavailable are crossed out. Other dates aren’t guaranteed: the provider confirms your date when you send a request.</p>
+          <div class="cal-wrap" id="vp-cal" data-off="0">${Calendar(v.unavailableDates || [], 0)}</div>
+          <div class="chip-row" style="margin-top:.6rem"><button class="btn btn-ghost btn-sm" type="button" data-cal="-1" aria-label="Previous month">${icon('chevron','sm')}Previous</button><button class="btn btn-ghost btn-sm" type="button" data-cal="1" aria-label="Next month">Next</button></div></section>
         <section><h2>Photos</h2>${photos.length ? `<div class="grid g-3">${photos.map(ph => `<img src="${esc(ph.src)}" alt="${esc(ph.alt||'')}" loading="lazy" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--r-md)">`).join('')}</div>` : `<p class="muted">Photos uploaded by the vendor will appear here.</p>`}</section>
-        <section><h2>Reviews</h2>${EmptyState({ iconName:'star', title:'No reviews yet', text:'Reviews on MA3AK come only from customers who booked this vendor, so every rating reflects a real event.' })}</section>
+        <section><h2>Reviews</h2><div id="vp-reviews">${preview ? '' : Skeletons(1)}</div><p class="tiny muted" style="margin-top:.6rem">Only customers whose booking with this provider was completed can leave a review, once per booking.</p></section>
         <section><h2>Contact</h2>
           <ul class="contact-list" style="margin-top:0">
-            <li><span class="card-ico">${icon('send')}</span><div><small>Through MA3AK</small><span>Send a quote request. The reply appears in your dashboard.</span></div></li>
+            <li><span class="card-ico">${icon('send')}</span><div><small>Through MA3AK</small><span>Send a booking request and message the provider from the booking page. Contact details are shared once a booking is confirmed.</span></div></li>
             ${v.instagram?`<li><span class="card-ico">${icon('instagram')}</span><div><small>Instagram</small><span>${esc(v.instagram)}</span></div></li>`:''}
             ${v.website?`<li><span class="card-ico">${icon('globe')}</span><div><small>Website</small><span>${esc(v.website)}</span></div></li>`:''}
           </ul></section>
       </div>
       <aside class="book-card panel" aria-label="Booking">
-        <p class="small muted">${v.startingPrice!=null ? 'Starting from' : 'Pricing'}</p>
-        <p class="kpi" style="margin-top:.3rem">${v.startingPrice!=null ? money(v.startingPrice) + `<span class="small muted">${({ per_guest:' / guest', per_hour:' / hour', per_item:' each' })[v.startingUnit] || ''}</span>` : 'On request'}</p>
+        <p class="small muted">Pricing</p>
+        <p class="kpi" style="margin-top:.3rem">${v.startingFrom ? esc(fromTxt(v)) : 'Custom quote'}</p>
         <div style="display:grid;gap:.6rem;margin-top:1.5rem">
-          <button class="btn btn-primary btn-block" type="button" id="request-booking"${dis}>${icon('send','sm')}Request a quote</button>
+          ${v.isDemo ? '<p class="small muted">Sample listing — can’t be booked.</p>' : `<button class="btn btn-primary btn-block" type="button" id="request-booking"${dis}>${icon('send','sm')}Request to book</button>`}
           <button class="btn btn-ghost btn-block" type="button" ${preview?dis:`data-add-vendor="${esc(v.id)}"`}>${icon('plus','sm')}Add to my plan</button>
           ${preview ? '' : `<button class="btn btn-ghost btn-block" type="button" id="fav-vendor" aria-pressed="false">${icon('heart','sm')}Save</button>`}
         </div>
-        <p class="tiny muted" style="margin-top:1rem">${preview ? 'Buttons are active once your profile is live.' : 'Requests don’t commit you to anything. The provider confirms the price and whether your date is free.'}</p>
+        <p class="tiny muted" style="margin-top:1rem">${preview ? 'Buttons are active once your profile is live.' : 'A request isn’t a booking. The provider confirms your date and price; you decide whether to accept.'}</p>
       </aside>
     </div>
   </div></section>`;
@@ -66,17 +71,21 @@ const VendorProfile = {
   render(){ return `<section class="page-hero"><div class="wrap"><div class="grid g-2">${Skeletons(2)}</div></div></section>`; },
   async mount(root, [id]){
     let v = null;
-    try { v = await api.getVendor(id); } catch(e) {}
-    if (!v) { try { const r = await fetch(`/api/vendors/${encodeURIComponent(id)}`); const j = await r.json(); if (j.ok) v = j.vendor; } catch(e) {} }
+    try { const r = await fetch(`/api/vendors/${encodeURIComponent(id)}`); const j = await r.json(); if (j.ok) v = j.vendor; } catch(e) {}
+    if (!v) { try { v = await api.getVendor(id); } catch(e) {} }
     if (!v){ root.innerHTML = `<section class="section"><div class="wrap">${EmptyState({ iconName:'store', level:'h1', title:'This vendor isn’t listed', text:'The profile may have moved or isn’t live yet. Browse other providers or search for what you need.', actions:`<a class="btn btn-primary" href="#/vendors">Explore vendors</a><button class="btn btn-ghost" type="button" data-open-search>Search</button>` })}</div></section>`; return; }
     document.title = `${v.name} | Ma3ak`;
     root.innerHTML = VendorProfileView(v);
-    $('#request-booking').addEventListener('click', () => openQuoteModal(v));
-    const rb = $('#request-booking'); if (rb && (v.whatsapp || v.phone)) rb.parentElement.insertAdjacentHTML('afterend', `<div class="chip-row" style="margin-top:.6rem">${v.whatsapp ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer" href="https://wa.me/${String(v.whatsapp).replace(/\D/g, '')}">${icon('message','sm')}WhatsApp</a>` : ''}${v.phone ? `<a class="btn btn-ghost btn-sm" href="tel:${String(v.phone).replace(/[^\d+]/g, '')}">${icon('phone','sm')}Call</a>` : ''}</div>`);
-    root.addEventListener('click', e => { const a = e.target.closest('[data-pkg-add]'), q = e.target.closest('[data-pkg-quote]');
-      if (a) addToPlanFlow(v, v.packages.find(p => p.id === a.dataset.pkgAdd)); if (q) openQuoteModal(v, v.packages.find(p => p.id === q.dataset.pkgQuote)); });
+    const rb = $('#request-booking'); if (rb) rb.addEventListener('click', () => openBooking(v));
+    root.addEventListener('click', e => { const a = e.target.closest('[data-pkg-add]'), q = e.target.closest('[data-pkg-quote]'), c = e.target.closest('[data-cal]');
+      if (a) addToPlanFlow(v, v.packages.find(p => p.id === a.dataset.pkgAdd)); if (q) openBooking(v, v.packages.find(p => p.id === q.dataset.pkgQuote));
+      if (c){ const box = $('#vp-cal', root), off = Math.max(0, Math.min(12, (+box.dataset.off || 0) + (+c.dataset.cal))); box.dataset.off = off; box.innerHTML = Calendar(v.unavailableDates || [], off); } });
     const fav = $('#fav-vendor'); fav.addEventListener('click', () => toggleVendorFav(v, fav));
     AUTH.ready.then(async u => { if (!u) return; try { const f = (await apiU('GET', '/api/favorites')).items; if (f.includes('v:' + v.id)){ fav.setAttribute('aria-pressed', 'true'); fav.innerHTML = `${icon('heart','sm')}Saved`; } } catch(e){} });
+    fetch(`/api/vendors/${encodeURIComponent(v.id)}/reviews`).then(r => r.json()).then(j => { const box = $('#vp-reviews', root); if (!box) return;
+      box.innerHTML = (j.reviews || []).length ? `<div class="stack" style="--s:.8rem">${j.reviews.map(r => `<article class="q-card"><header><div><b>${esc(r.author)}</b><small class="muted">${fmtDate(r.date)} · <span class="tag gold">${icon('check','sm')}Verified booking</span></small></div><span class="stars" aria-label="${r.rating} out of 5">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span></header>${r.body ? `<p>${esc(r.body)}</p>` : ''}${r.reply ? `<p class="q-reply small"><b>Reply from ${esc(v.name)}:</b> ${esc(r.reply)}</p>` : ''}${AUTH.user ? `<button class="link tiny" type="button" data-report-review="${esc(r.id)}">${icon('flag','sm')}Report</button>` : ''}</article>`).join('')}</div>`
+        : EmptyState({ iconName:'star', title:'No reviews yet', text:'Reviews come only from customers who completed a booking with this provider.' });
+      box.addEventListener('click', e => { const b = e.target.closest('[data-report-review]'); if (b) openReport('review', b.dataset.reportReview); }); }).catch(() => {});
   }
 };
 const VendorPreview = {

@@ -14,7 +14,7 @@
     "create-admin": "node scripts/create-admin.js",
     "seed:generate": "node scripts/make-seed.js",
     "pretest": "node scripts/build.js",
-    "test": "node --test test/smoke.test.js test/platform.test.js test/marketplace.test.js"
+    "test": "node --test test/smoke.test.js test/platform.test.js test/marketplace.test.js test/bookings.test.js"
   },
   "dependencies": {
     "@netlify/blobs": "^10.0.0",

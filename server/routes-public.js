@@ -14,7 +14,6 @@ import { token, sha256 } from './security.js';
 
 const contactRules = { name: { required: true, max: 120, msg: 'Enter your name.' }, email: { required: true, type: 'email', max: 254 }, phone: { type: 'phone', max: 30 }, subject: { required: true, max: 160, msg: 'Enter a subject.' }, message: { required: true, min: 10, max: 5000, msg: 'Write at least 10 characters.' } };
 const vendorRules = { businessName: { required: true, max: 160, msg: 'Enter your business name.' }, contactName: { required: true, max: 120, msg: 'Enter a contact person.' }, phone: { required: true, type: 'phone', max: 30 }, email: { required: true, type: 'email', max: 254 }, category: { required: true, max: 40 }, location: { required: true, max: 40 }, instagram: { max: 120 }, website: { type: 'url', max: 300 }, message: { max: 5000 } };
-const bookingRules = { vendorId: { required: true, max: 80 }, vendorName: { required: true, max: 160 }, name: { required: true, max: 120 }, email: { required: true, type: 'email', max: 254 }, phone: { type: 'phone', max: 30 }, date: { required: true, max: 10 }, guests: { max: 6 }, message: { max: 5000 } };
 const eventContactRules = { fullName: { required: true, max: 120, msg: 'Enter your name.' }, phone: { type: 'phone', max: 30 }, email: { type: 'email', max: 254 } };
 
 const LIMITS = { contact: 64e3, vendor: 64e3, booking: 64e3, event: 5.8e6 }; // Netlify Functions accept up to 6 MB
@@ -60,11 +59,6 @@ export const publicRoutes = {
   'POST /api/vendors': async (req, res, db) => intake(req, res, db, 'vendor', b => {
     const c = check(b, vendorRules); if (!c.ok) return { error: 'Please check the highlighted fields.', fields: c.fields };
     const v = c.value; return { name: v.businessName, email: v.email, phone: v.phone, payload: v, summary: `Business: ${v.businessName}\nContact: ${v.contactName}\nPhone: ${v.phone}\nEmail: ${v.email}\nCategory: ${v.category}\nLocation: ${v.location}${v.instagram ? `\nInstagram: ${v.instagram}` : ''}${v.website ? `\nWebsite: ${v.website}` : ''}\n\n${v.message}` };
-  }),
-  'POST /api/bookings': async (req, res, db) => intake(req, res, db, 'booking', b => {
-    const c = check(b, bookingRules); if (!c.ok) return { error: 'Please check the highlighted fields.', fields: c.fields };
-    const v = c.value; if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date)) return { error: 'Choose a valid date.', fields: { date: 'Invalid date.' } };
-    return { name: v.name, email: v.email, phone: v.phone, payload: v, summary: `Booking request for ${v.vendorName}\nName: ${v.name}\nEmail: ${v.email}${v.phone ? `\nPhone: ${v.phone}` : ''}\nDate: ${v.date}${v.guests ? `\nGuests: ${v.guests}` : ''}\n\n${v.message}` };
   }),
   'POST /api/requests': async (req, res, db) => intake(req, res, db, 'event', b => {
     const c = check(b.contact || {}, eventContactRules); if (!c.ok) return { error: 'Please check your details.', fields: c.fields };

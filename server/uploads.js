@@ -47,3 +47,14 @@ function stripPng(b) {
 }
 
 // Storage of decoded images lives in storage.js (Netlify Blobs in production).
+
+// Verification documents: PDF (checked by its signature) or a JPG/PNG photo (metadata stripped).
+export function decodeDocument(dataUrl) {
+  if (typeof dataUrl !== 'string') return null;
+  const m = /^data:(application\/pdf|image\/jpeg|image\/png);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!m) return null;
+  if (m[1] !== 'application/pdf') { const img = decodeImage(dataUrl); return img ? { mime: img.mime, buf: img.buf } : null; }
+  const buf = Buffer.from(m[2], 'base64');
+  if (!buf.length || buf.length > MAX_BYTES || buf.subarray(0, 5).toString('latin1') !== '%PDF-') return null;
+  return { mime: 'application/pdf', buf };
+}

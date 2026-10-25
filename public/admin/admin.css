@@ -70,3 +70,19 @@ h2.sec{font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;color:var(--
 .chkset{border:1px solid var(--line);border-radius:10px;display:flex;flex-wrap:wrap;gap:.3rem .8rem;padding:.6rem .8rem}
 .chk{display:inline-flex;align-items:center;gap:.4rem;font-weight:400}.chk input{width:auto}
 .consent-box{background:#FBF8F2}
+
+.btn.sm{padding:.25rem .6rem;font-size:.8rem}
+.card.warn{border-color:var(--gold);background:#FBF6EC}
+.card.doc{display:grid;gap:.4rem}
+.chk{display:flex;gap:.5rem;align-items:flex-start;font-weight:400}
+.chk input{width:auto;margin-top:.2rem}
+.form2{display:grid;gap:.75rem}
+.sortable{list-style:none;padding:0;margin:.5rem 0 1rem;display:grid;gap:.35rem}
+.sortable li{display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;background:#fff;border:1px solid var(--line);border-radius:10px;cursor:grab}
+.sortable li.dragging{opacity:.5}.sortable li.over{border-color:var(--gold)}
+.sortable .grip{color:var(--muted);letter-spacing:-.15em}.sortable .pos{min-width:1.6rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.sortable .grow{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
+.msg-row{padding:.5rem 0;border-top:1px solid var(--line)}.msg-row p{margin:.2rem 0 0;white-space:pre-wrap}
+.kpi.link{cursor:pointer;text-align:left;font:inherit}
+h2.sec{font-size:1rem;margin:1.25rem 0 .6rem}
+details summary{cursor:pointer}

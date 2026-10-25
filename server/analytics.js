@@ -41,7 +41,7 @@ export async function report(db) {
     one("SELECT COUNT(DISTINCT user_id) AS n FROM requests WHERE type = 'event' AND user_id IS NOT NULL"), one('SELECT COUNT(*) AS n FROM events'), one('SELECT COUNT(*) AS n FROM requests'),
     one("SELECT COUNT(*) AS n FROM requests WHERE type = 'event'"), one('SELECT COUNT(*) AS n FROM ai_conversations'), one('SELECT COUNT(*) AS n FROM ai_conversations WHERE handoff = 1'),
     one('SELECT COUNT(*) AS n FROM shares'), one("SELECT COUNT(*) AS n FROM users WHERE role = 'partner'"), one("SELECT COUNT(*) AS n FROM vendors WHERE status = 'approved' AND active = 1 AND consent_at IS NOT NULL"),
-    one('SELECT COUNT(*) AS n FROM quotes'), one('SELECT COUNT(DISTINCT event_id) AS n FROM event_services')]);
+    one('SELECT COUNT(*) AS n FROM bookings'), one('SELECT COUNT(DISTINCT event_id) AS n FROM event_services')]);
   let equipped = [];
   try { equipped = await db.all("SELECT (props::jsonb ->> 'item') AS k, COUNT(*) AS n FROM analytics WHERE name = 'item_equipped' AND at >= ? AND props LIKE '{%' GROUP BY 1 ORDER BY n DESC LIMIT 10", since); } catch {}
   const [music, areas, decor, lighting, effects] = await Promise.all([top('music', 6), top('areas', 6), top('backdrop'), top('lights'), top('effects')]);

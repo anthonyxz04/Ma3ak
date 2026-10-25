@@ -558,6 +558,7 @@ const ST = (() => {
   function markup(){
     return `<div class="studio" id="studio">
       <canvas class="studio-canvas" tabindex="0" aria-label="3D event designer. Drag items to move them, drag empty space to look around. With an item selected, use arrow keys to move it, R to rotate, Delete to remove."></canvas>
+      <p class="st-approx" title="Sizes, spacing and capacity are not to scale unless the venue has provided real measurements.">Approximate preview — not to scale</p>
       <div class="st-top"><button type="button" class="st-chip st-chip-btn" id="st-venue" data-st="venues"></button>
         <div class="st-tools" role="toolbar" aria-label="Layout">
           <button type="button" data-st="spin" aria-pressed="true" title="Auto-rotate">${icon('refresh','sm')}<span class="sr-only">Auto-rotate</span></button>

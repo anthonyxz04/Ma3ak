@@ -1,4 +1,4 @@
-// Marketplace tests: partner sign-up and isolation, admin approval, quotes, the budget planner,
+// Marketplace tests: partner sign-up and isolation, admin approval, booking requests, the budget planner,
 // public share links, website content managed from the admin, and the built-in assistant.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,6 +29,7 @@ function client(cookieName = /ma3ak_(user|sid)=/) {
   return c;
 }
 const P1 = client(), P2 = client(), C1 = client(), C2 = client(), admin = client();
+const pdf = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4\n%%EOF\n').toString('base64');
 const png = 'data:image/png;base64,' + Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), Buffer.from('0000000D49484452000000010000000108060000001F15C489', 'hex'), Buffer.from('0000000A49444154789C6300010000050001', 'hex'), Buffer.from('0D0A2DB4', 'hex'), Buffer.from('0000000049454E44AE426082', 'hex')]).toString('base64');
 let vendorId, pkgId, photoId, quoteId, planId;
 
@@ -46,7 +47,8 @@ test('partner sign-up creates a private draft listing', async () => {
 });
 
 test('partner edits profile, packages and photos; submit requires a complete listing', async () => {
-  let r = await P1.req('POST', '/api/partner/submit', { consent: true }); assert.equal(r.status, 422); assert.equal(r.code, 'incomplete');
+  let r = await P1.req('POST', '/api/partner/submit', { consent: true }); assert.equal(r.status, 422, 'ownership/authority must be confirmed');
+  r = await P1.req('POST', '/api/partner/submit', { consent: true, authorized: true }); assert.equal(r.status, 422); assert.equal(r.code, 'incomplete');
   r = await P1.req('PUT', '/api/partner/profile', { name: 'Rami Studio', category: 'photography', description: 'Wedding and event photography across Lebanon.', about: '<script>alert(1)</script> Ten years of weddings.', locations: ['beirut', 'jbeil', 'moon'], eventTypes: ['wedding'], phone: '+961 70 000 001', instagram: '@ramistudio' });
   assert.equal(r.status, 200);
   r = await P1.req('PUT', '/api/partner/packages/new', { name: 'Half day', price: 500, priceMax: 400, unit: 'flat' }); assert.equal(r.status, 422, 'max below min rejected');
@@ -57,8 +59,13 @@ test('partner edits profile, packages and photos; submit requires a complete lis
   assert.equal((await fetch(BASE + `/api/photos/${photoId}`)).status, 404, 'photos of an unpublished listing are private');
   const own = await fetch(BASE + `/api/photos/${photoId}`, { headers: { Cookie: P1.cookie } }); assert.equal(own.status, 200); assert.equal(own.headers.get('content-type'), 'image/png');
   const me = await P1.req('GET', '/api/partner'); assert.deepEqual(me.vendor.locations, ['beirut', 'jbeil']); assert.equal(me.vendor.instagram, 'ramistudio'); assert.equal(me.vendor.packages.length, 2);
-  r = await P1.req('POST', '/api/partner/submit', { consent: true }); assert.equal(r.status, 200); assert.equal(r.listingStatus, 'pending'); assert.equal((await P1.req('GET', '/api/partner')).vendor.status, 'pending');
-  assert.ok(!(await (await fetch(BASE + '/api/vendors')).json()).vendors.some(v => v.id === vendorId), 'pending is still not public');
+  r = await P1.req('POST', '/api/partner/submit', { consent: true, authorized: true }); assert.equal(r.status, 422, 'verification documents and legal details are required');
+  assert.equal((await P1.req('PUT', '/api/partner/profile', { ...me.vendor, eventTypes: me.vendor.eventTypes, legalName: 'Rami Studio SARL', address: 'Achrafieh, Beirut' })).status, 200);
+  assert.equal((await P1.req('POST', '/api/partner/documents', { kind: 'id_document', file: png })).status, 201);
+  assert.equal((await P1.req('POST', '/api/partner/documents', { kind: 'business_registration', file: pdf })).status, 201);
+  const terms = (await P1.req('GET', '/api/partner/plan')).terms; assert.equal((await P1.req('POST', '/api/partner/terms/accept', { version: terms.version })).status, 200);
+  r = await P1.req('POST', '/api/partner/submit', { consent: true, authorized: true }); assert.equal(r.status, 200); assert.equal(r.listingStatus, 'submitted'); assert.equal((await P1.req('GET', '/api/partner')).vendor.status, 'submitted');
+  assert.ok(!(await (await fetch(BASE + '/api/vendors')).json()).vendors.some(v => v.id === vendorId), 'submitted is still not public');
 });
 
 test('partners are isolated from each other', async () => {
@@ -66,20 +73,19 @@ test('partners are isolated from each other', async () => {
   assert.equal((await P2.req('DELETE', `/api/partner/packages/${pkgId}`)).status, 404);
   assert.equal((await P2.req('DELETE', `/api/partner/photos/${photoId}`)).status, 404);
   assert.equal((await fetch(BASE + `/api/photos/${photoId}`, { headers: { Cookie: P2.cookie } })).status, 404);
-  const other = await P2.req('GET', '/api/partner'); assert.notEqual(other.vendor.id, vendorId); assert.equal(other.quotes.length, 0);
+  const other = await P2.req('GET', '/api/partner'); assert.notEqual(other.vendor.id, vendorId); assert.deepEqual(other.bookingCounts, {});
   assert.equal((await P1.req('GET', '/api/admin/vendors')).status, 401, 'partners are not admins');
 });
 
-test('admin reviews: approve publishes, verify is separate, reject and unpublish hide', async () => {
+test('admin reviews: approval with the checklist verifies and publishes; unpublish hides', async () => {
   let r = await admin.req('POST', '/api/admin/login', { email: 'chief@ma3ak.test', password: 'Chief-password-1234' }); assert.equal(r.status, 200);
-  const list = await admin.req('GET', '/api/admin/vendors?status=pending'); assert.ok(list.vendors.some(v => v.id === vendorId && v.owner.email === 'rami@studio.test'));
-  r = await admin.req('POST', `/api/admin/vendors/${vendorId}/review`, { action: 'approve', note: 'Checked Instagram' }); assert.equal(r.status, 200);
-  let pub = await (await fetch(BASE + `/api/vendors/${vendorId}`)).json(); assert.equal(pub.vendor.name, 'Rami Studio'); assert.equal(pub.vendor.verified, false, 'approval is not verification');
+  const list = await admin.req('GET', '/api/admin/vendors?status=submitted'); assert.ok(list.vendors.some(v => v.id === vendorId && v.owner.email === 'rami@studio.test'));
+  r = await admin.req('POST', `/api/admin/vendors/${vendorId}/review`, { action: 'approve', note: 'Checked Instagram' }); assert.equal(r.status, 422, 'the checklist is required');
+  r = await admin.req('POST', `/api/admin/vendors/${vendorId}/review`, { action: 'approve', note: 'Documents checked', checks: { identity: true, business: true, authority: true, listing: true } }); assert.equal(r.status, 200);
+  let pub = await (await fetch(BASE + `/api/vendors/${vendorId}`)).json(); assert.equal(pub.vendor.name, 'Rami Studio'); assert.equal(pub.vendor.verified, true);
   assert.equal(pub.vendor.startingPrice, 500); assert.equal(pub.vendor.packages.length, 2); assert.equal(pub.vendor.photos.length, 1);
   assert.equal((await fetch(BASE + `/api/photos/${photoId}`)).status, 200, 'photos become public with the listing');
-  r = await admin.req('POST', `/api/admin/vendors/${vendorId}/review`, { action: 'verify' }); assert.equal(r.status, 200);
-  assert.equal((await (await fetch(BASE + `/api/vendors/${vendorId}`)).json()).vendor.verified, true);
-  r = await admin.req('POST', '/api/admin/vendors/demo-lens-studio/review', { action: 'verify' }); assert.equal(r.status, 422, 'demo listings cannot be verified');
+  r = await admin.req('POST', '/api/admin/vendors/demo-lens-studio/review', { action: 'verify', checks: { identity: true, business: true, authority: true, listing: true } }); assert.equal(r.status, 422, 'demo listings cannot be verified');
   r = await admin.req('POST', `/api/admin/vendors/${vendorId}/review`, { action: 'unpublish' }); assert.equal((await fetch(BASE + `/api/vendors/${vendorId}`)).status, 404);
   r = await admin.req('POST', `/api/admin/vendors/${vendorId}/review`, { action: 'publish' }); assert.equal((await fetch(BASE + `/api/vendors/${vendorId}`)).status, 200);
   const me = await P1.req('GET', '/api/partner'); assert.equal(me.vendor.status, 'approved');
@@ -87,46 +93,46 @@ test('admin reviews: approve publishes, verify is separate, reject and unpublish
   assert.equal((await admin.req('GET', '/api/admin/vendors')).vendors.find(v => v.id === vendorId).changedSinceApproval, true, 'admin sees edits made after approval');
 });
 
-test('quote requests: customer → partner reply → customer sees status', async () => {
+test('booking requests: customer → partner quote → customer sees it', async () => {
   let r = await C1.req('POST', '/api/auth/register', { name: 'Nour', email: 'nour@example.com', password: 'Wedding-in-june-26', consent: true }); assert.equal(r.status, 201);
-  r = await C1.req('POST', `/api/vendors/${vendorId}/quotes`, { packageId: pkgId, date: '2020-01-01', guests: 120, message: 'Hi', elapsed: 9000 }); assert.equal(r.status, 422, 'past dates rejected');
-  r = await C1.req('POST', `/api/vendors/${vendorId}/quotes`, { packageId: pkgId, date: '2027-06-12', guests: 120, location: 'jbeil', message: 'Do you cover Jbeil?', elapsed: 9000 });
-  assert.equal(r.status, 201); assert.match(r.ref, /^Q-/);
-  const anon = await fetch(BASE + `/api/vendors/${vendorId}/quotes`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'X-Forwarded-For': '192.0.2.200' }, body: JSON.stringify({ name: 'Guest', message: 'x', consent: true, elapsed: 9000 }) });
-  assert.equal(anon.status, 422, 'email or phone required');
-  const pq = await P1.req('GET', '/api/partner'); assert.equal(pq.quotes.length, 1); quoteId = pq.quotes[0].id; assert.equal(pq.quotes[0].status, 'new'); assert.equal(pq.quotes[0].package_name, 'Half day');
-  assert.equal((await P2.req('PATCH', `/api/partner/quotes/${quoteId}`, { reply: 'mine now' })).status, 404, 'other partners cannot answer');
-  r = await P1.req('PATCH', `/api/partner/quotes/${quoteId}`, { status: 'quoted' }); assert.equal(r.status, 422, 'amount needed for quoted');
-  r = await P1.req('PATCH', `/api/partner/quotes/${quoteId}`, { status: 'quoted', quotedAmount: 650, reply: 'Yes, we cover Jbeil. Date is free.', partnerNote: 'Lead from MA3AK' }); assert.equal(r.status, 200);
-  const mine = await C1.req('GET', '/api/my/quotes'); assert.equal(mine.quotes[0].status, 'quoted'); assert.equal(mine.quotes[0].quoted_amount, 650); assert.equal(mine.quotes[0].partner_note, undefined, 'partner notes stay private');
-  assert.equal((await C2.req('GET', '/api/my/quotes')).status, 401);
-  const aq = await admin.req('GET', '/api/admin/quotes'); assert.ok(aq.quotes.some(q => q.id === quoteId)); assert.equal(aq.quotes[0].ip_hash, undefined);
+  const form = { vendorId, packageId: pkgId, name: 'Nour Saad', phone: '+961 71 234 567', eventType: 'wedding', date: '2027-06-12', location: 'jbeil', guests: 120, notes: 'Do you cover Jbeil?', confirm: true };
+  r = await C1.req('POST', '/api/bookings', { ...form, date: '2020-01-01' }); assert.equal(r.status, 422, 'past dates rejected');
+  r = await C1.req('POST', '/api/bookings', form); assert.equal(r.status, 201); assert.match(r.ref, /^B-/); quoteId = r.id;
+  const pq = await P1.req('GET', '/api/partner/bookings'); assert.equal(pq.bookings.length, 1); assert.equal(pq.bookings[0].status, 'quote_requested'); assert.equal(pq.bookings[0].packageName, 'Half day');
+  assert.equal((await P2.req('POST', `/api/bookings/${quoteId}/offers`, { items: [{ label: 'x', unitPrice: '1' }] })).status, 404, 'other partners cannot answer');
+  r = await P1.req('POST', `/api/bookings/${quoteId}/offers`, { items: [{ label: 'Half day in Jbeil', unitPrice: '650' }], message: 'Yes, we cover Jbeil.' }); assert.equal(r.status, 201);
+  assert.equal((await P1.req('POST', `/api/bookings/${quoteId}/action`, { action: 'note', note: 'Lead from MA3AK' })).status, 200);
+  const mine = await C1.req('GET', '/api/my/bookings'); assert.equal(mine.bookings[0].status, 'quote_received'); assert.equal(mine.bookings[0].latestOffer.totalMinor, 65000);
+  const detail = await C1.req('GET', `/api/bookings/${quoteId}`); assert.equal(detail.booking.vendorNote, undefined, 'partner notes stay private');
+  assert.equal((await C2.req('GET', '/api/my/bookings')).status, 401);
+  const aq = await admin.req('GET', '/api/admin/bookings'); assert.ok(aq.bookings.some(q => q.id === quoteId));
 });
 
+const T = r => (r.totals.byCurrency.find(t => t.currency === 'USD') || { low: 0, high: 0 });
 test('budget planner: packages, per-guest totals, over-budget warning, custom lines, privacy', async () => {
   let r = await C1.req('POST', '/api/plans', { name: 'Our wedding', eventType: 'wedding', date: '2027-06-12', location: 'jbeil', guests: 100, budget: 5000, theme: 'Elegant', setting: 'outdoor', wanted: ['venue', 'catering', 'photography', 'nope'], notes: 'Private: grandma is a surprise guest' });
   assert.equal(r.status, 201); planId = r.id;
-  r = await C1.req('GET', `/api/events/${planId}/plan`); assert.equal(r.plan.guests, 100); assert.deepEqual(r.plan.wanted, ['venue', 'catering', 'photography']); assert.equal(r.totals.low, 0);
+  r = await C1.req('GET', `/api/events/${planId}/plan`); assert.equal(r.plan.guests, 100); assert.deepEqual(r.plan.wanted, ['venue', 'catering', 'photography']); assert.equal(T(r).low, 0);
   r = await C1.req('POST', `/api/events/${planId}/services`, { packageId: 'demo-mezze-catering-p1' }); assert.equal(r.status, 201); // $28–35 per guest
-  assert.equal(r.totals.low, 2800); assert.equal(r.totals.high, 3500); const catering = r.services[0]; assert.equal(catering.followsGuests, true);
-  r = await C1.req('POST', `/api/events/${planId}/services`, { packageId: pkgId }); assert.equal(r.totals.low, 2800 + 550);
+  assert.equal(T(r).low, 280000); assert.equal(T(r).high, 350000); const catering = r.services[0]; assert.equal(catering.followsGuests, true);
+  r = await C1.req('POST', `/api/events/${planId}/services`, { packageId: pkgId }); assert.equal(T(r).low, 280000 + 55000);
   r = await C1.req('POST', `/api/events/${planId}/services`, { packageId: 'demo-seaside-venue-p2' }); assert.equal(r.totals.quoteItems, 1, 'unpriced package = request a quote');
-  r = await C1.req('POST', `/api/events/${planId}/services`, { label: 'Wedding favors', category: 'other', unitPrice: 3, unit: 'per_guest' }); assert.equal(r.status, 201); assert.equal(r.totals.low, 2800 + 550 + 300);
-  r = await C1.req('PUT', `/api/events/${planId}/plan`, { ...r.plan, guests: 150 }); assert.equal(r.status, 200); assert.equal(r.totals.low, 4200 + 550 + 450, 'per-guest lines follow the guest count');
-  r = await C1.req('POST', `/api/events/${planId}/services`, { packageId: 'demo-bloom-decor-p2' }); assert.equal(r.totals.overBudget, true); assert.ok(r.totals.remaining < 0);
+  r = await C1.req('POST', `/api/events/${planId}/services`, { label: 'Wedding favors', category: 'other', unitPrice: 3, unit: 'per_guest' }); assert.equal(r.status, 201); assert.equal(T(r).low, 280000 + 55000 + 30000);
+  r = await C1.req('PUT', `/api/events/${planId}/plan`, { ...r.plan, guests: 150 }); assert.equal(r.status, 200); assert.equal(T(r).low, 420000 + 55000 + 45000, 'per-guest lines follow the guest count');
+  r = await C1.req('POST', `/api/events/${planId}/services`, { packageId: 'demo-bloom-decor-p2' }); assert.equal(r.totals.overBudget, true); assert.ok(r.totals.remainingMinor < 0);
   const decor = r.services.find(s => s.packageId === 'demo-bloom-decor-p2');
   r = await C1.req('POST', `/api/events/${planId}/services`, { packageId: 'demo-bloom-decor-p1', replace: decor.id }); assert.equal(r.services.filter(s => s.category === 'decoration').length, 1, 'swap to a cheaper package');
   r = await C1.req('PATCH', `/api/events/${planId}/services/${catering.id}`, { quantity: 0 }); assert.equal(r.status, 422);
-  r = await C1.req('PATCH', `/api/events/${planId}/services/${catering.id}`, { quantity: 120 }); assert.equal(r.services.find(s => s.id === catering.id).lineLow, 3360);
+  r = await C1.req('PATCH', `/api/events/${planId}/services/${catering.id}`, { quantity: 120 }); assert.equal(r.services.find(s => s.id === catering.id).lineLowMinor, 336000);
   r = await C1.req('PATCH', `/api/events/${planId}/services/${catering.id}`, { quantity: null }); assert.equal(r.services.find(s => s.id === catering.id).qty, 150);
   // changes by the provider are flagged, not silently applied
   await P1.req('PUT', `/api/partner/packages/${pkgId}`, { name: 'Half day', price: 600, priceMax: 800, unit: 'flat' });
-  r = await C1.req('GET', `/api/events/${planId}/plan`); const photo = r.services.find(s => s.packageId === pkgId); assert.equal(photo.unitPrice, 550); assert.deepEqual(photo.currentPrice, { price: 600, priceMax: 800 });
-  r = await C1.req('PATCH', `/api/events/${planId}/services/${photo.id}`, { refreshPrice: true }); assert.equal(r.services.find(s => s.id === photo.id).unitPrice, 600);
+  r = await C1.req('GET', `/api/events/${planId}/plan`); const photo = r.services.find(s => s.packageId === pkgId); assert.equal(photo.unitPriceMinor, 55000); assert.deepEqual(photo.currentPrice, { priceType: 'starting', currency: 'USD', priceMinor: 60000, priceMaxMinor: 80000 });
+  r = await C1.req('PATCH', `/api/events/${planId}/services/${photo.id}`, { refreshPrice: true }); assert.equal(r.services.find(s => s.id === photo.id).unitPriceMinor, 60000);
   r = await C1.req('PUT', `/api/events/${planId}/plan`, { ...r.plan, status: 'finalized', rev: 1 }); assert.equal(r.status, 409, 'stale edits are refused');
   const latest = await C1.req('GET', `/api/events/${planId}/plan`); r = await C1.req('PUT', `/api/events/${planId}/plan`, { ...latest.plan, status: 'finalized', rev: latest.plan.rev }); assert.equal(r.plan.status, 'finalized');
   // persistence: reopen from the dashboard list
-  const list = await C1.req('GET', '/api/events'); const row = list.events.find(e => e.id === planId); assert.equal(row.services, 5); assert.equal(row.est_low, r.totals.low); assert.equal(row.quote_items, 1);
+  const list = await C1.req('GET', '/api/events'); const row = list.events.find(e => e.id === planId); assert.equal(row.services, 5); assert.equal(row.est_low_minor, T(r).low); assert.equal(row.quote_items, 1);
   // other customers can't read or change it
   assert.equal((await C2.req('POST', '/api/auth/register', { name: 'Omar', email: 'omar@example.com', password: 'Birthday-cake-2027', consent: true })).status, 201);
   assert.equal((await C2.req('GET', `/api/events/${planId}/plan`)).status, 404);
@@ -139,7 +145,7 @@ test('share link shows the plan without private notes or contact details; off by
   r = await C1.req('POST', `/api/events/${planId}/shares`, { permission: 'view', days: 7 }); assert.equal(r.status, 201);
   const token = r.share.url.split('/#/s/')[1], sid = r.share.id;
   const pub = await (await fetch(BASE + `/api/share/${token}`)).json();
-  assert.equal(pub.plan.services.length, 5); assert.ok(pub.plan.totals.low > 0);
+  assert.equal(pub.plan.services.length, 5); assert.ok(T(pub.plan).low > 0);
   const text = JSON.stringify(pub); assert.doesNotMatch(text, /grandma/); assert.doesNotMatch(text, /nour@example\.com/); assert.equal(pub.event.owner, 'Nour');
   await C1.req('DELETE', `/api/events/${planId}/shares/${sid}`); assert.equal((await fetch(BASE + `/api/share/${token}`)).status, 404, 'revoked links stop working');
 });
@@ -154,8 +160,8 @@ test('admin manages website content, categories and sees the activity log', asyn
   assert.ok((await (await fetch(BASE + '/api/site')).json()).categories.some(c => c.id === 'security'));
   assert.equal((await admin.req('DELETE', '/api/admin/categories/photography')).status, 409, 'categories in use cannot be deleted');
   r = await admin.req('GET', '/api/admin/audit'); const actions = r.rows.map(x => x.action);
-  for (const a of ['partner_registered', 'partner_submitted', 'vendor_approve', 'vendor_verify', 'setting_updated', 'category_saved', 'quote_updated'].filter(a => a !== 'quote_updated')) assert.ok(actions.includes(a), a);
-  const o = await admin.req('GET', '/api/admin/overview'); assert.equal(o.overview.partners, 2); assert.equal(o.overview.published, 1); assert.ok(o.overview.demo >= 10); assert.equal(o.overview.quotesAll, 1);
+  for (const a of ['partner_registered', 'partner_submitted', 'vendor_approve', 'setting_updated', 'category_saved', 'document_uploaded']) assert.ok(actions.includes(a), a);
+  const o = await admin.req('GET', '/api/admin/overview'); assert.equal(o.overview.partners, 2); assert.equal(o.overview.published, 1); assert.ok(o.overview.demo >= 10); assert.equal(o.overview.bookingsAll, 1);
   const ev = await admin.req('GET', `/api/admin/events/${planId}`); assert.equal(ev.status, 200, 'support can open saved plans');
 });
 

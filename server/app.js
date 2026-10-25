@@ -17,6 +17,10 @@ import { plannerRoutes } from './planner.js';
 import { inviteRoutes } from './invites.js';
 import { vendorRoutes } from './vendors.js';
 import { siteRoutes } from './site.js';
+import { partnerGuard } from './partner.js';
+import { bookingRoutes, expireDue, sendReminders } from './bookings.js';
+import { billingRoutes } from './billing.js';
+import { notificationRoutes, retryEmails } from './notifications.js';
 import { removeImage } from './storage.js';
 
 let ready = null;
@@ -28,9 +32,10 @@ async function build() {
   if (config.sessionSecret.length < 32) config.sessionSecret = await storedSecret(db, 'session');
   useRateLimitStore(db);
   await firstAdmin(db);
-  const track = makeTracker(db), guard = adminGuard(db);
+  const track = makeTracker(db), guard = adminGuard(db), partner = partnerGuard(db);
   const routes = { ...publicRoutes, ...adminRoutes(db), ...userRoutes(db, track), ...eventRoutes(db, track), ...plannerRoutes(db, track), ...catalogRoutes(db, guard), ...aiRoutes(db, track),
-    ...analyticsRoutes(db, track), ...adminPlusRoutes(db, guard), ...planningRoutes(db), ...inviteRoutes(db, track), ...vendorRoutes(db, guard), ...siteRoutes(db, guard) };
+    ...analyticsRoutes(db, track), ...adminPlusRoutes(db, guard), ...planningRoutes(db), ...inviteRoutes(db, track), ...vendorRoutes(db, guard, partner), ...siteRoutes(db, guard),
+    ...bookingRoutes(db, guard, partner), ...billingRoutes(db, guard, partner), ...notificationRoutes(db) };
   const patterns = Object.keys(routes).map(k => { const [method, p] = k.split(' '); return { method, re: new RegExp('^' + p.replace(/:(\w+)/g, '([^/]+)') + '$'), fn: routes[k] }; });
   // Literal paths win over parameter paths (e.g. /api/vendors/... before /api/vendors/:id).
   patterns.sort((a, b) => (a.re.source.includes('([^/]+)') ? 1 : 0) - (b.re.source.includes('([^/]+)') ? 1 : 0));
@@ -71,7 +76,8 @@ async function firstAdmin(db) {
   console.log('Admin account created from ADMIN_EMAIL. Remove ADMIN_PASSWORD from the environment after signing in.');
 }
 
-// Daily clean-up: old requests (default 2 years), expired sessions, tokens and rate-limit rows.
+// Daily clean-up: old requests (default 2 years), expired sessions, tokens and rate-limit rows;
+// expired quotes and requests, reminders two days before confirmed bookings, email retries, ended plans.
 export async function cleanup(db) {
   const cutoff = new Date(Date.now() - config.retentionDays * 864e5).toISOString(), t = Date.now();
   for (const f of await db.all('SELECT f.id FROM files f JOIN requests r ON r.id = f.request_id WHERE r.created_at < ?', cutoff)) await removeImage(f.id);
@@ -80,5 +86,9 @@ export async function cleanup(db) {
   await db.run('DELETE FROM user_sessions WHERE expires < ?', t);
   await db.run('DELETE FROM user_tokens WHERE expires < ?', t - 864e5);
   await db.run('DELETE FROM rate_limits WHERE reset_at < ?', t - 3600e3);
-  return { requestsRemoved: r.changes };
+  const expired = await expireDue(db), reminders = await sendReminders(db), emailRetries = await retryEmails(db);
+  const plansEnded = (await db.run("UPDATE vendor_subscriptions SET status = 'expired', updated_at = ? WHERE status IN ('active','comped') AND current_period_end IS NOT NULL AND current_period_end < ?", new Date().toISOString(), new Date().toISOString().slice(0, 10))).changes;
+  await db.run("UPDATE vendors SET sponsored = 0 WHERE sponsored = 1 AND sponsored_until IS NOT NULL AND sponsored_until < ?", new Date().toISOString().slice(0, 10));
+  await db.run('DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < ?', new Date(Date.now() - 365 * 864e5).toISOString());
+  return { requestsRemoved: r.changes, bookingsExpired: expired, reminders, emailRetries, plansEnded };
 }
