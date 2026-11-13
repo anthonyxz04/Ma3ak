@@ -527,6 +527,8 @@ export function bookingRoutes(db, guard, partner) {
       const text = clean(b.body, 2000), parts = p.b.customer_name.split(/\s+/).filter(Boolean), author = parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : (parts[0] || 'Customer');
       try { await db.run('INSERT INTO reviews (id, booking_id, vendor_id, user_id, author_name, rating, body, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)', uid(), p.b.id, p.b.vendor_id, p.u.id, author, rating, text, now(), now()); }
       catch (e) { if (e.code === '23505') return fail(res, 409, 'You already reviewed this booking.'); throw e; }
+      // The verified review replaces this customer's earlier unverified rating of the same provider (one voice per customer).
+      await db.run('DELETE FROM reviews WHERE vendor_id = ? AND user_id = ? AND booking_id IS NULL', p.b.vendor_id, p.u.id);
       await notifyProvider(db, p.b, { kind: 'review', title: `New ${rating}-star review`, body: text.slice(0, 200), dedupe: `review:${p.b.id}` });
       sendJson(res, 201, { ok: true });
     },
@@ -549,8 +551,8 @@ export function bookingRoutes(db, guard, partner) {
     },
     'GET /api/vendors/:id/reviews': async (req, res, _db, url, id) => {
       const v = await db.get(`SELECT v.id FROM vendors v WHERE v.id = ? AND ${PUBLIC}`, String(id)); if (!v) return fail(res, 404, 'This provider isn’t listed.');
-      const rows = await db.all("SELECT id, author_name, rating, body, vendor_reply, created_at FROM reviews WHERE vendor_id = ? AND status = 'published' ORDER BY created_at DESC LIMIT 100", v.id);
-      sendJson(res, 200, { ok: true, reviews: rows.map(r => ({ id: r.id, author: r.author_name, rating: r.rating, body: r.body, reply: r.vendor_reply, date: r.created_at.slice(0, 10), verifiedBooking: true })) });
+      const rows = await db.all("SELECT id, booking_id, author_name, rating, body, vendor_reply, created_at FROM reviews WHERE vendor_id = ? AND status = 'published' ORDER BY (booking_id IS NULL), created_at DESC LIMIT 100", v.id);
+      sendJson(res, 200, { ok: true, reviews: rows.map(r => ({ id: r.id, author: r.author_name, rating: r.rating, body: r.body, reply: r.vendor_reply, date: r.created_at.slice(0, 10), verifiedBooking: !!r.booking_id })) });
     },
 
     // ---------- partner ----------
@@ -579,7 +581,7 @@ export function bookingRoutes(db, guard, partner) {
     },
     'GET /api/partner/reviews': async (req, res) => {
       const p = await partner(req, res); if (!p) return;
-      sendJson(res, 200, { ok: true, reviews: await db.all('SELECT r.id, r.author_name, r.rating, r.body, r.status, r.vendor_reply, r.created_at, b.ref FROM reviews r JOIN bookings b ON b.id = r.booking_id WHERE r.vendor_id = ? ORDER BY r.created_at DESC LIMIT 200', p.v.id) });
+      sendJson(res, 200, { ok: true, reviews: await db.all('SELECT r.id, r.author_name, r.rating, r.body, r.status, r.vendor_reply, r.created_at, b.ref FROM reviews r LEFT JOIN bookings b ON b.id = r.booking_id WHERE r.vendor_id = ? ORDER BY r.created_at DESC LIMIT 200', p.v.id) });
     },
 
     // ---------- admin ----------
@@ -624,7 +626,7 @@ export function bookingRoutes(db, guard, partner) {
     },
     'GET /api/admin/reviews': async (req, res) => {
       if (!await guard(req, res)) return;
-      sendJson(res, 200, { ok: true, reviews: await db.all('SELECT r.*, b.ref, v.name AS vendor_name FROM reviews r JOIN bookings b ON b.id = r.booking_id LEFT JOIN vendors v ON v.id = r.vendor_id ORDER BY r.created_at DESC LIMIT 300') });
+      sendJson(res, 200, { ok: true, reviews: await db.all('SELECT r.*, b.ref, v.name AS vendor_name FROM reviews r LEFT JOIN bookings b ON b.id = r.booking_id LEFT JOIN vendors v ON v.id = r.vendor_id ORDER BY r.created_at DESC LIMIT 300') });
     },
     'POST /api/admin/reviews/:id': async (req, res, _db, url, id) => {
       const s = await guard(req, res, true); if (!s) return; let b; try { b = await readJson(req, 4096); } catch (e) { return fail(res, e.status || 400, e.message); }

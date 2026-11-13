@@ -3,7 +3,7 @@ import { config } from './config.js';
 
 export async function notifyNewRequest({ ref, type, name, summary }) {
   if (!config.resendKey || !config.notifyEmail) return;
-  const label = { event: 'Event request', contact: 'Contact message', vendor: 'Vendor application', booking: 'Booking request' }[type] || 'Request';
+  const label = { event: 'Event request', contact: 'Contact message', vendor: 'Vendor application', booking: 'Booking request', feedback: 'Website feedback' }[type] || 'Request';
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',

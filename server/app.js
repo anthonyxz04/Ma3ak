@@ -22,6 +22,8 @@ import { bookingRoutes, expireDue, sendReminders } from './bookings.js';
 import { billingRoutes } from './billing.js';
 import { notificationRoutes, retryEmails } from './notifications.js';
 import { removeImage } from './storage.js';
+import { feedbackRoutes } from './feedback.js';
+import { ratingRoutes } from './ratings.js';
 
 let ready = null;
 export function getApp() { return ready || (ready = build().catch(e => { ready = null; throw e; })); }
@@ -35,7 +37,7 @@ async function build() {
   const track = makeTracker(db), guard = adminGuard(db), partner = partnerGuard(db);
   const routes = { ...publicRoutes, ...adminRoutes(db), ...userRoutes(db, track), ...eventRoutes(db, track), ...plannerRoutes(db, track), ...catalogRoutes(db, guard), ...aiRoutes(db, track),
     ...analyticsRoutes(db, track), ...adminPlusRoutes(db, guard), ...planningRoutes(db), ...inviteRoutes(db, track), ...vendorRoutes(db, guard, partner), ...siteRoutes(db, guard),
-    ...bookingRoutes(db, guard, partner), ...billingRoutes(db, guard, partner), ...notificationRoutes(db) };
+    ...bookingRoutes(db, guard, partner), ...billingRoutes(db, guard, partner), ...notificationRoutes(db), ...feedbackRoutes(db, guard), ...ratingRoutes(db, guard) };
   const patterns = Object.keys(routes).map(k => { const [method, p] = k.split(' '); return { method, re: new RegExp('^' + p.replace(/:(\w+)/g, '([^/]+)') + '$'), fn: routes[k] }; });
   // Literal paths win over parameter paths (e.g. /api/vendors/... before /api/vendors/:id).
   patterns.sort((a, b) => (a.re.source.includes('([^/]+)') ? 1 : 0) - (b.re.source.includes('([^/]+)') ? 1 : 0));
@@ -82,6 +84,7 @@ export async function cleanup(db) {
   const cutoff = new Date(Date.now() - config.retentionDays * 864e5).toISOString(), t = Date.now();
   for (const f of await db.all('SELECT f.id FROM files f JOIN requests r ON r.id = f.request_id WHERE r.created_at < ?', cutoff)) await removeImage(f.id);
   const r = await db.run('DELETE FROM requests WHERE created_at < ?', cutoff);
+  await db.run('DELETE FROM feedback WHERE created_at < ?', cutoff);
   await db.run('DELETE FROM sessions WHERE expires < ?', t);
   await db.run('DELETE FROM user_sessions WHERE expires < ?', t);
   await db.run('DELETE FROM user_tokens WHERE expires < ?', t - 864e5);

@@ -214,7 +214,11 @@ test('reviews only after a completed booking, once', async () => {
   assert.equal((await act(P1, B2, 'complete')).status, 409, 'vendor cannot complete before the event date');
   let r = await admin.req('POST', `/api/admin/bookings/${B2}/action`, { action: 'admin_complete', note: 'Event held' }); assert.equal(r.status, 200);
   assert.equal((await C1.req('POST', `/api/bookings/${B2}/review`, { rating: 6 })).status, 422);
+  // A quick star rating given earlier is replaced by the verified booking review (one voice per customer).
+  assert.equal((await C1.req('PUT', `/api/vendors/${V1}/rating`, { rating: 2, body: 'Before the event' })).status, 201);
   r = await C1.req('POST', `/api/bookings/${B2}/review`, { rating: 5, body: 'Beautiful photos.' }); assert.equal(r.status, 201);
+  assert.equal((await C1.req('GET', `/api/vendors/${V1}/my-rating`)).reason, 'verified');
+  assert.equal((await C1.req('PUT', `/api/vendors/${V1}/rating`, { rating: 1 })).status, 409, 'no extra rating after a verified review');
   assert.equal((await C1.req('POST', `/api/bookings/${B2}/review`, { rating: 1 })).status, 409, 'one review per booking');
   const pub = await (await fetch(BASE + `/api/vendors/${V1}/reviews`)).json(); assert.equal(pub.reviews.length, 1); assert.equal(pub.reviews[0].author, 'Maya H.'); assert.equal(pub.reviews[0].verifiedBooking, true);
   const v = await (await fetch(BASE + `/api/vendors/${V1}`)).json(); assert.equal(v.vendor.rating, 5); assert.equal(v.vendor.reviewCount, 1);

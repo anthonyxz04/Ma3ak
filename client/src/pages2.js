@@ -30,7 +30,7 @@ function VendorProfileView(v, { preview=false } = {}){
           ${v.sponsored ? `<p class="tiny muted" style="margin-top:.6rem">Sponsored: this provider pays for extra visibility. It doesn’t affect verification or reviews.</p>` : ''}
           <div class="vc-meta" style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:1rem;color:var(--muted)">
             ${locs?`<span style="display:inline-flex;gap:.4rem;align-items:center">${icon('pin','sm')}${esc(locs)}</span>`:''}
-            ${v.rating!=null?`<span style="display:inline-flex;gap:.4rem;align-items:center">${icon('star','sm')}${v.rating.toFixed(1)} from ${v.reviewCount} verified booking${v.reviewCount === 1 ? '' : 's'}</span>`:''}
+            ${v.rating!=null?`<span style="display:inline-flex;gap:.4rem;align-items:center">${icon('star','sm')}${v.rating.toFixed(1)} from ${v.reviewCount} rating${v.reviewCount === 1 ? '' : 's'}</span>`:''}
           </div>
         </header>
         <section style="margin-top:2.5rem;padding-top:0;border:0"><h2>About</h2><p class="muted" style="max-width:65ch">${esc(v.about || v.description || (preview ? 'Your description goes here. Tell planners what makes your service right for their event.' : 'This vendor hasn’t added a description yet.'))}</p></section>
@@ -44,7 +44,7 @@ function VendorProfileView(v, { preview=false } = {}){
           <div class="cal-wrap" id="vp-cal" data-off="0">${Calendar(v.unavailableDates || [], 0)}</div>
           <div class="chip-row" style="margin-top:.6rem"><button class="btn btn-ghost btn-sm" type="button" data-cal="-1" aria-label="Previous month">${icon('chevron','sm')}Previous</button><button class="btn btn-ghost btn-sm" type="button" data-cal="1" aria-label="Next month">Next</button></div></section>
         <section><h2>Photos</h2>${photos.length ? `<div class="grid g-3">${photos.map(ph => `<img src="${esc(ph.src)}" alt="${esc(ph.alt||'')}" loading="lazy" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:var(--r-md)">`).join('')}</div>` : `<p class="muted">Photos uploaded by the vendor will appear here.</p>`}</section>
-        <section><h2>Reviews</h2><div id="vp-reviews">${preview ? '' : Skeletons(1)}</div><p class="tiny muted" style="margin-top:.6rem">Only customers whose booking with this provider was completed can leave a review, once per booking.</p></section>
+        <section><h2>Ratings and reviews</h2>${preview ? '' : '<div id="vp-rate"></div>'}<div id="vp-reviews">${preview ? '' : Skeletons(1)}</div><p class="tiny muted" style="margin-top:.6rem">Signed-in customers can rate each provider once from 1 to 5 stars. Reviews marked “Verified booking” come from a completed booking on MA3AK.</p></section>
         <section><h2>Contact</h2>
           <ul class="contact-list" style="margin-top:0">
             <li><span class="card-ico">${icon('send')}</span><div><small>Through MA3AK</small><span>Send a booking request and message the provider from the booking page. Contact details are shared once a booking is confirmed.</span></div></li>
@@ -82,10 +82,12 @@ const VendorProfile = {
       if (c){ const box = $('#vp-cal', root), off = Math.max(0, Math.min(12, (+box.dataset.off || 0) + (+c.dataset.cal))); box.dataset.off = off; box.innerHTML = Calendar(v.unavailableDates || [], off); } });
     const fav = $('#fav-vendor'); fav.addEventListener('click', () => toggleVendorFav(v, fav));
     AUTH.ready.then(async u => { if (!u) return; try { const f = (await apiU('GET', '/api/favorites')).items; if (f.includes('v:' + v.id)){ fav.setAttribute('aria-pressed', 'true'); fav.innerHTML = `${icon('heart','sm')}Saved`; } } catch(e){} });
-    fetch(`/api/vendors/${encodeURIComponent(v.id)}/reviews`).then(r => r.json()).then(j => { const box = $('#vp-reviews', root); if (!box) return;
-      box.innerHTML = (j.reviews || []).length ? `<div class="stack" style="--s:.8rem">${j.reviews.map(r => `<article class="q-card"><header><div><b>${esc(r.author)}</b><small class="muted">${fmtDate(r.date)} · <span class="tag gold">${icon('check','sm')}Verified booking</span></small></div><span class="stars" aria-label="${r.rating} out of 5">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span></header>${r.body ? `<p>${esc(r.body)}</p>` : ''}${r.reply ? `<p class="q-reply small"><b>Reply from ${esc(v.name)}:</b> ${esc(r.reply)}</p>` : ''}${AUTH.user ? `<button class="link tiny" type="button" data-report-review="${esc(r.id)}">${icon('flag','sm')}Report</button>` : ''}</article>`).join('')}</div>`
-        : EmptyState({ iconName:'star', title:'No reviews yet', text:'Reviews come only from customers who completed a booking with this provider.' });
-      box.addEventListener('click', e => { const b = e.target.closest('[data-report-review]'); if (b) openReport('review', b.dataset.reportReview); }); }).catch(() => {});
+    const loadReviews = () => fetch(`/api/vendors/${encodeURIComponent(v.id)}/reviews`).then(r => r.json()).then(j => { const box = $('#vp-reviews', root); if (!box) return;
+      box.innerHTML = (j.reviews || []).length ? `<div class="stack" style="--s:.8rem">${j.reviews.map(r => `<article class="q-card"><header><div><b>${esc(r.author)}</b><small class="muted">${fmtDate(r.date)}${r.verifiedBooking ? ` · <span class="tag gold">${icon('check','sm')}Verified booking</span>` : ''}</small></div><span class="stars" aria-label="${r.rating} out of 5">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span></header>${r.body ? `<p>${esc(r.body)}</p>` : ''}${r.reply ? `<p class="q-reply small"><b>Reply from ${esc(v.name)}:</b> ${esc(r.reply)}</p>` : ''}${AUTH.user ? `<button class="link tiny" type="button" data-report-review="${esc(r.id)}">${icon('flag','sm')}Report</button>` : ''}</article>`).join('')}</div>`
+        : EmptyState({ iconName:'star', title:'No ratings yet', text:v.isDemo ? 'This is a sample listing, so it can’t be rated.' : 'Be the first to rate this provider.' });
+    }).catch(() => {});
+    $('#vp-reviews', root).addEventListener('click', e => { const b = e.target.closest('[data-report-review]'); if (b) openReport('review', b.dataset.reportReview); });
+    loadReviews(); if (!v.isDemo) mountVendorRating(root, v, loadReviews);
   }
 };
 const VendorPreview = {
@@ -253,6 +255,7 @@ const Contact = {
           ${FormField({ id:'c-message', label:'Message', type:'textarea', required:true })}
           ${HONEYPOT}${ConsentField('c-consent')}
           <div><button class="btn btn-primary" type="submit">Send Message</button></div>
+          <p class="small muted">Have an idea or found a problem on the site? <a class="link" href="#/feedback">Send us feedback</a>.</p>
         </form>
       </div>
     </div></section>`;

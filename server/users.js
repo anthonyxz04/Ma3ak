@@ -101,6 +101,7 @@ export function userRoutes(db, track) {
       await tx(db, async (db) => {
         if (u.role === 'partner') await db.run('DELETE FROM vendors WHERE owner_user_id = ?', u.id); // a partner's own listing goes with the account
         (await db.run('DELETE FROM requests WHERE user_id = ?', u.id));
+        await db.run('DELETE FROM reviews WHERE user_id = ? AND booking_id IS NULL', u.id); // ratings given without a booking go with the account
         // Booking records stay for the other party and for accounting, without this person's contact details.
         await db.run("UPDATE bookings SET customer_email = NULL, customer_phone = NULL, address = '', updated_at = ? WHERE user_id = ?", now(), u.id);
         await db.run("UPDATE booking_offers SET status = 'withdrawn' WHERE status = 'sent' AND booking_id IN (SELECT id FROM bookings WHERE user_id = ?)", u.id);

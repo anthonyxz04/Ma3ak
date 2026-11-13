@@ -93,13 +93,13 @@ export function siteRoutes(db, guard) {
     'GET /api/admin/overview': async (req, res) => {
       if (!await guard(req, res)) return;
       const n = async (sql, ...a) => (await db.get(sql, ...a)).n;
-      const [customers, partners, pending, published, demo, plans, finalized, openRequests, bookingsAll, confirmed, requestsNew, aiChats, newUsers7, reportsOpen, disputed, planRequests] = await Promise.all([
+      const [customers, partners, pending, published, demo, plans, finalized, openRequests, bookingsAll, confirmed, requestsNew, aiChats, newUsers7, reportsOpen, disputed, planRequests, feedbackNew] = await Promise.all([
         n("SELECT COUNT(*) AS n FROM users WHERE role = 'customer'"), n("SELECT COUNT(*) AS n FROM users WHERE role = 'partner'"), n("SELECT COUNT(*) AS n FROM vendors WHERE status IN ('submitted','pending','under_review')"),
         n("SELECT COUNT(*) AS n FROM vendors WHERE status = 'approved' AND active = 1 AND consent_at IS NOT NULL AND is_demo = 0"), n('SELECT COUNT(*) AS n FROM vendors WHERE is_demo = 1'),
         n('SELECT COUNT(*) AS n FROM events'), n("SELECT COUNT(*) AS n FROM events WHERE status = 'finalized'"), n("SELECT COUNT(*) AS n FROM bookings WHERE status IN ('quote_requested','revision_requested','awaiting_vendor')"), n('SELECT COUNT(*) AS n FROM bookings'),
         n("SELECT COUNT(*) AS n FROM bookings WHERE status IN ('confirmed','in_progress','completed')"), n("SELECT COUNT(*) AS n FROM requests WHERE status = 'new'"), n('SELECT COUNT(*) AS n FROM ai_conversations'), n('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', new Date(Date.now() - 7 * 864e5).toISOString()),
-        n("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"), n('SELECT COUNT(*) AS n FROM bookings WHERE disputed = 1'), n("SELECT COUNT(*) AS n FROM vendor_subscriptions WHERE status = 'requested'")]);
-      sendJson(res, 200, { ok: true, overview: { customers, partners, pending, published, demo, plans, finalized, openRequests, bookingsAll, confirmed, requestsNew, aiChats, newUsers7, reportsOpen, disputed, planRequests } });
+        n("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"), n('SELECT COUNT(*) AS n FROM bookings WHERE disputed = 1'), n("SELECT COUNT(*) AS n FROM vendor_subscriptions WHERE status = 'requested'"), n("SELECT COUNT(*) AS n FROM feedback WHERE status = 'new'")]);
+      sendJson(res, 200, { ok: true, overview: { customers, partners, pending, published, demo, plans, finalized, openRequests, bookingsAll, confirmed, requestsNew, aiChats, newUsers7, reportsOpen, disputed, planRequests, feedbackNew } });
     },
   };
 }

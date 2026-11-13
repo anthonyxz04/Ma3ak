@@ -258,6 +258,7 @@ const Events = {
         <h2 class="h3">${e.name}</h2>
         <p>${e.blurb}</p>
         <ul class="pill-list" style="margin-top:.9rem" aria-label="Services often needed">${e.services.slice(0,5).map(s => `<li class="tag">${catSingle(s)}</li>`).join('')}${e.services.length>5?`<li class="tag">+${e.services.length-5} more</li>`:''}</ul>
+        <div class="ev-rate" data-evrate="${e.id}"></div>
         <div class="ec-foot"><a class="btn btn-primary btn-sm" href="#/customize" data-cz-type="${e.id}">Customize</a><a class="btn btn-ghost btn-sm" href="#/plan${qs({event:e.id})}">Plan budget</a><a class="btn btn-ghost btn-sm" href="#/search${qs({event:e.id})}">Find vendors</a></div>
       </article>`).join('')}
     </div></section>
