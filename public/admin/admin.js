@@ -51,7 +51,7 @@
   }
 
   // ---------- main ----------
-  const TABS = [['overview','Overview'],['vendors','Providers'],['bookings','Bookings'],['order','Listing order'],['finance','Commission & payments'],['plans','Provider plans'],['reviews','Reviews & reports'],['requests','Requests'],['events','Plans'],['users','Accounts'],['leads','Leads'],['website','Website'],['categories','Categories'],['catalog','3D catalog'],['kb','Knowledge'],['ai','Assistant chats'],['activity','Activity'],['integrations','Integrations']];
+  const TABS = [['overview','Overview'],['vendors','Providers'],['bookings','Bookings'],['order','Listing order'],['finance','Commission & payments'],['plans','Provider plans'],['reviews','Reviews & reports'],['feedback','Feedback'],['requests','Requests'],['events','Plans'],['users','Accounts'],['leads','Leads'],['website','Website'],['categories','Categories'],['catalog','3D catalog'],['kb','Knowledge'],['ai','Assistant chats'],['activity','Activity'],['integrations','Integrations']];
   let tab = 'overview';
   async function renderApp() {
     const top = h('header', { class: 'top' },
@@ -62,7 +62,7 @@
     const nav = h('nav', { class: 'tabsbar', 'aria-label': 'Sections' }, ...TABS.map(([k, l]) => h('button', { class: 'tab', type: 'button', 'aria-pressed': String(tab === k), text: l, on: { click: () => { tab = k; renderApp(); } } })));
     const main = h('main', { class: 'wrap', id: 'main' });
     app.replaceChildren(top, nav, main);
-    Promise.resolve(({ overview: viewOverview, requests: viewRequests, leads: viewLeads, users: viewUsers, events: viewEvents, ai: viewAI, vendors: viewVendors, bookings: viewBookings, order: viewOrder, finance: viewFinance, plans: viewPlans, reviews: viewReviews, website: viewWebsite, categories: viewCategories, activity: viewActivity, catalog: viewCatalog, kb: viewKB, integrations: viewIntegrations })[tab](main)).catch(x => { if (x.message !== 'signed out') main.append(h('div', { class: 'empty', text: 'This section didn’t load: ' + x.message })); });
+    Promise.resolve(({ overview: viewOverview, requests: viewRequests, leads: viewLeads, users: viewUsers, events: viewEvents, ai: viewAI, vendors: viewVendors, bookings: viewBookings, order: viewOrder, finance: viewFinance, plans: viewPlans, reviews: viewReviews, feedback: viewFeedback, website: viewWebsite, categories: viewCategories, activity: viewActivity, catalog: viewCatalog, kb: viewKB, integrations: viewIntegrations })[tab](main)).catch(x => { if (x.message !== 'signed out') main.append(h('div', { class: 'empty', text: 'This section didn’t load: ' + x.message })); });
   }
   function viewRequests(main) {
     const kpis = h('div', { class: 'kpis', id: 'kpis' });
@@ -89,7 +89,7 @@
   async function viewOverview(main) {
     const [{ report: r }, { overview: o }] = await Promise.all([call('GET', '/api/admin/analytics'), call('GET', '/api/admin/overview')]);
     const t = r.totals, conv = r.funnel[0][1] ? Math.round(r.funnel[3][1] / r.funnel[0][1] * 100) : 0;
-    main.append(h('h2', { class: 'sec', text: 'Marketplace' }), h('div', { class: 'kpis' }, ...[['Customers', o.customers], ['New accounts (7 days)', o.newUsers7], ['Partners', o.partners], ['Waiting for verification', o.pending, 'vendors', 'submitted'], ['Live providers (real)', o.published], ['Demo listings', o.demo], ['Requests waiting for a provider', o.openRequests, 'bookings'], ['All bookings', o.bookingsAll, 'bookings'], ['Confirmed or completed', o.confirmed], ['Open reports', o.reportsOpen, 'reviews'], ['Disputed bookings', o.disputed, 'bookings'], ['Plan requests', o.planRequests, 'plans'], ['Saved plans', o.plans], ['New website requests', o.requestsNew, 'requests'], ['Assistant chats', o.aiChats]].map(([l, n, go, f]) => h(go ? 'button' : 'div', { class: 'kpi' + (go ? ' link' : ''), type: go ? 'button' : null, on: go ? { click: () => { tab = go; if (f) vFilter = f; renderApp(); } } : null }, h('b', { text: n }), h('span', { text: l })))),
+    main.append(h('h2', { class: 'sec', text: 'Marketplace' }), h('div', { class: 'kpis' }, ...[['Customers', o.customers], ['New accounts (7 days)', o.newUsers7], ['Partners', o.partners], ['Waiting for verification', o.pending, 'vendors', 'submitted'], ['Live providers (real)', o.published], ['Demo listings', o.demo], ['Requests waiting for a provider', o.openRequests, 'bookings'], ['All bookings', o.bookingsAll, 'bookings'], ['Confirmed or completed', o.confirmed], ['Open reports', o.reportsOpen, 'reviews'], ['Disputed bookings', o.disputed, 'bookings'], ['Plan requests', o.planRequests, 'plans'], ['New feedback', o.feedbackNew, 'feedback'], ['Saved plans', o.plans], ['New website requests', o.requestsNew, 'requests'], ['Assistant chats', o.aiChats]].map(([l, n, go, f]) => h(go ? 'button' : 'div', { class: 'kpi' + (go ? ' link' : ''), type: go ? 'button' : null, on: go ? { click: () => { tab = go; if (f) vFilter = f; renderApp(); } } : null }, h('b', { text: n }), h('span', { text: l })))),
       h('h2', { class: 'sec', text: '3D designer and requests' }), h('div', { class: 'kpis' }, ...[['Accounts', t.users], ['Events / plans', t.events], ['Event requests', t.quotes], ['All requests', t.requests], ['AI chats', t.aiChats], ['Asked for a human', t.handoffs], ['Share links', t.shares], ['Conversion', conv + '%']].map(([l, n]) => h('div', { class: 'kpi' }, h('b', { text: n }), h('span', { text: l })))),
       h('div', { class: 'grid3' }, line(r.signups, 'New customers'), line(r.eventsCreated, 'Events created'), line(r.requests, 'Requests received')),
       h('div', { class: 'card funnel' }, h('h3', { text: 'Funnel' }), ...r.funnel.map(([l, n], i) => h('div', { class: 'fstep' }, h('span', { text: l }), h('i', {}, h('em', { 'data-w': r.funnel[0][1] ? Math.round(n / r.funnel[0][1] * 100) : 0 })), h('b', { text: n })))),
@@ -381,6 +381,32 @@
             target && target.booking_id ? h('button', { class: 'btn ghost', type: 'button', text: 'Open booking', on: { click: () => { d.remove(); openBooking(target.booking_id); } } }) : r.target_type === 'booking' ? h('button', { class: 'btn ghost', type: 'button', text: 'Open booking', on: { click: () => { d.remove(); openBooking(r.target_id); } } }) : '')); })),
       h('div', { class: 'card' }, h('h3', { text: 'Reviews' }), h('p', { class: 'muted', text: 'Only customers with a completed booking can review, once per booking. You can hide a review that breaks the rules; you can’t edit it.' }),
         table([['vendor_name', 'Provider'], ['rating', 'Rating', r => '★'.repeat(r.rating)], ['body', 'Review'], ['author_name', 'By'], ['ref', 'Booking'], ['status', 'Status'], ['act', '', r => h('button', { class: 'btn ghost', type: 'button', text: r.status === 'hidden' ? 'Publish' : 'Hide', on: { click: async e => { e.stopPropagation(); await call('POST', `/api/admin/reviews/${r.id}`, { status: r.status === 'hidden' ? 'published' : 'hidden' }); toast('Saved'); renderApp(); } } })]], reviews)));
+  }
+
+  // ---------- website feedback ----------
+  let fbStatus = 'new', fbKind = '';
+  const FB_KIND = { idea: 'Idea', problem: 'Problem', praise: 'Compliment', other: 'Other' }, FB_STATUS = { new: 'New', read: 'Read', done: 'Done', spam: 'Spam', all: 'All' };
+  async function viewFeedback(main) {
+    const { feedback, counts, rating } = await call('GET', `/api/admin/feedback?status=${fbStatus}${fbKind ? '&kind=' + fbKind : ''}`);
+    const statusTabs = h('div', { class: 'tabs', role: 'group', 'aria-label': 'Status' }, ...Object.entries(FB_STATUS).map(([k, l]) => h('button', { class: 'tab', type: 'button', 'aria-pressed': String(fbStatus === k), text: k === 'all' ? l : `${l} (${counts[k] || 0})`, on: { click: () => { fbStatus = k; renderApp(); } } })));
+    const kindSel = h('select', { 'aria-label': 'Kind', on: { change: e => { fbKind = e.target.value; renderApp(); } } }, h('option', { value: '', text: 'Any kind' }), ...Object.entries(FB_KIND).map(([k, l]) => h('option', { value: k, text: l, selected: fbKind === k })));
+    main.append(h('div', { class: 'kpis' }, ...[['New', counts.new || 0], ['Read', counts.read || 0], ['Done', counts.done || 0], ['Average rating', rating.average == null ? '—' : `${rating.average} / 5`], ['Ratings given', rating.count]].map(([l, n]) => h('div', { class: 'kpi' }, h('b', { text: n }), h('span', { text: l })))),
+      h('div', { class: 'card' }, h('div', { class: 'row' }, h('h3', { text: 'Website feedback' }), statusTabs, kindSel),
+        h('p', { class: 'muted', text: 'Sent from the “Send feedback” page on the website. Click a row to read it, add a note and mark it read, done or spam.' }),
+        table([['created_at', 'When', r => fmt(r.created_at)], ['kind', 'Kind', r => h('span', { class: 'badge' + (r.kind === 'problem' ? ' spam' : r.kind === 'praise' ? ' booked' : r.kind === 'idea' ? ' new' : ''), text: FB_KIND[r.kind] || r.kind })], ['rating', 'Rating', r => r.rating ? '★'.repeat(r.rating) : '—'],
+          ['message', 'Feedback', r => r.message.length > 140 ? r.message.slice(0, 140) + '…' : r.message], ['page', 'Page', r => r.page || '—'], ['from', 'From', r => r.email || r.user_email || 'Anonymous'], ['status', 'Status', r => h('span', { class: 'badge' + (r.status === 'new' ? ' new' : r.status === 'done' ? ' booked' : r.status === 'spam' ? ' spam' : ''), text: FB_STATUS[r.status] || r.status })]], feedback, openFeedback)));
+  }
+  function openFeedback(r) {
+    const note = h('textarea', { rows: '3', maxlength: '1000', placeholder: 'Private note for the team (optional)' }); note.value = r.admin_note || '';
+    const who = r.email || r.user_email ? `${r.user_name ? r.user_name + ' · ' : ''}${r.email || r.user_email}${r.user_email ? ' (signed in)' : ''}` : 'Anonymous visitor';
+    const lines = [`${FB_KIND[r.kind] || r.kind}${r.rating ? ` · ${'★'.repeat(r.rating)} (${r.rating}/5)` : ''}`, `Reference ${r.ref} · ${fmt(r.created_at)}`, `From: ${who}`, `Page: ${r.page || 'not known'}${r.lang ? ` · Language: ${r.lang}` : ''}`, '', r.message];
+    const save = async s => { await call('POST', `/api/admin/feedback/${r.id}`, { status: s, note: note.value }); toast('Saved'); d.remove(); renderApp(); };
+    const reply = r.email || r.user_email;
+    const d = drawer('Feedback', h('pre', { class: 'summary', text: lines.join('\n') }), h('label', {}, 'Note', note),
+      h('div', { class: 'row' }, ...[['read', 'Mark read'], ['done', 'Mark done'], ['spam', 'Spam'], ['new', 'Back to new']].filter(([s]) => s !== r.status).map(([s, l]) => h('button', { class: s === 'spam' ? 'btn danger' : s === 'done' ? 'btn' : 'btn ghost', type: 'button', text: l, on: { click: () => save(s) } })),
+        reply ? h('a', { class: 'btn ghost', href: `mailto:${encodeURIComponent(reply).replace(/%40/g, '@')}?subject=${encodeURIComponent('Your feedback to MA3AK (' + r.ref + ')')}`, text: 'Reply by email' }) : ''));
+    // Opening a new item marks it as read.
+    if (r.status === 'new') call('POST', `/api/admin/feedback/${r.id}`, { status: 'read' }).catch(() => {});
   }
   // ---------- website content ----------
   async function viewWebsite(main) {

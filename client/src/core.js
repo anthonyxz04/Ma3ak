@@ -269,7 +269,7 @@ function Header(){
   </div></header>
   <div class="mobile-menu" id="mobile-menu" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Menu">
     <div class="mm-top">${Logo()}<button class="icon-btn" type="button" id="menu-close" aria-label="Close menu">${icon('x')}</button></div>
-    <nav aria-label="Mobile">${NAV.map(([h,l]) => `<a href="${h}">${l}</a>`).join('')}<a href="#/for-vendors">For Vendors</a><a href="#/dashboard">My events</a><button type="button" class="link" data-lang-open>Language</button></nav>
+    <nav aria-label="Mobile">${NAV.map(([h,l]) => `<a href="${h}">${l}</a>`).join('')}<a href="#/for-vendors">For Vendors</a><a href="#/dashboard">My events</a><a href="#/feedback">Send feedback</a><button type="button" class="link" data-lang-open>Language</button></nav>
     <div class="mm-foot">
       <a class="btn btn-light btn-block" href="#/customize">Create your event</a>
       <div class="mm-contact">${mailLink()}${igLink('icon-btn')}</div>
@@ -277,7 +277,7 @@ function Header(){
   </div>`;
 }
 function Footer(){
-  const links = [['#/','Home'],['#/plan','Budget planner'],['#/how-it-works','How It Works'],['#/events','Events'],['#/vendors','Providers'],['#/about','About'],['#/partner/join','Become a partner'],['#/contact','Contact']];
+  const links = [['#/','Home'],['#/plan','Budget planner'],['#/how-it-works','How It Works'],['#/events','Events'],['#/vendors','Providers'],['#/about','About'],['#/partner/join','Become a partner'],['#/contact','Contact'],['#/feedback','Send feedback']];
   return `<footer class="site-footer"><div class="wrap">
     <div class="f-top">
       <div class="f-brand">${Logo()}<p class="f-tagline">Your event. Your budget. Your plan.</p></div>
@@ -285,7 +285,7 @@ function Footer(){
       <div><h2>Plan</h2><ul><li><a href="#/plan">Event Planner</a></li><li><a href="#/customize">Customize your event</a></li><li><a href="#/dashboard">My Event</a></li><li><a href="#/search">Search vendors</a></li><li><a href="#/for-vendors">Join as a vendor</a></li></ul></div>
       <div><h2>Contact</h2><ul class="f-contact"><li>${icon('mail','sm')}${mailLink()}</li><li>${icon('phone','sm')}${phoneText()}</li><li>${icon('pin','sm')}<span>${CONFIG.country}</span></li></ul>${igLink('ig-btn')}</div>
     </div>
-    <div class="f-bottom"><span>© ${CONFIG.year} MA3AK. All rights reserved.</span><span class="f-legal"><a href="#/privacy">Privacy Policy</a><a href="#/terms">Terms</a><button type="button" class="link" data-lang-open>Language</button></span><span>Built for events across Lebanon.</span></div>
+    <div class="f-bottom"><span>© ${CONFIG.year} MA3AK. All rights reserved.</span><span class="f-legal"><a href="#/privacy">Privacy Policy</a><a href="#/terms">Terms</a><a href="#/feedback">Send feedback</a><button type="button" class="link" data-lang-open>Language</button></span><span>Built for events across Lebanon.</span></div>
   </div></footer>`;
 }
 function setupHeader(){

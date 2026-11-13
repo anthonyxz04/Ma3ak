@@ -253,6 +253,7 @@ const Contact = {
           ${FormField({ id:'c-message', label:'Message', type:'textarea', required:true })}
           ${HONEYPOT}${ConsentField('c-consent')}
           <div><button class="btn btn-primary" type="submit">Send Message</button></div>
+          <p class="small muted">Have an idea or found a problem on the site? <a class="link" href="#/feedback">Send us feedback</a>.</p>
         </form>
       </div>
     </div></section>`;
