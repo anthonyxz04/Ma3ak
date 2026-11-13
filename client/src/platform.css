@@ -546,3 +546,13 @@ table.px tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
 .bk-layout .plan-side{position:static;display:grid;gap:clamp(18px,2.4vw,28px)}
 .bk-layout .plan-main{display:grid;gap:clamp(18px,2.4vw,28px);align-content:start}
 @media (max-width:980px){.bk-layout .plan-side{order:0}}
+/* ---------- star ratings ---------- */
+.rate-panel{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+.rate-panel.col{display:grid;justify-content:stretch;align-items:start;gap:.8rem}
+.stars-show{display:inline-flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.stars-show .stars{color:var(--gold);letter-spacing:.05em}
+.ev-rate{display:grid;gap:.35rem;margin-top:.9rem;padding-top:.8rem;border-top:1px solid var(--line)}
+.ev-rate-mine{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.ev-rate .stars-in label{font-size:1.35rem}
+/* text-style buttons (e.g. "Report" under a review) look like links, not grey boxes */
+button.link{border:0;background:none;padding:0;font-family:inherit;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:.25rem;width:auto;justify-self:start;align-self:start}

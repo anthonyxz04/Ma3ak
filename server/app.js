@@ -23,6 +23,7 @@ import { billingRoutes } from './billing.js';
 import { notificationRoutes, retryEmails } from './notifications.js';
 import { removeImage } from './storage.js';
 import { feedbackRoutes } from './feedback.js';
+import { ratingRoutes } from './ratings.js';
 
 let ready = null;
 export function getApp() { return ready || (ready = build().catch(e => { ready = null; throw e; })); }
@@ -36,7 +37,7 @@ async function build() {
   const track = makeTracker(db), guard = adminGuard(db), partner = partnerGuard(db);
   const routes = { ...publicRoutes, ...adminRoutes(db), ...userRoutes(db, track), ...eventRoutes(db, track), ...plannerRoutes(db, track), ...catalogRoutes(db, guard), ...aiRoutes(db, track),
     ...analyticsRoutes(db, track), ...adminPlusRoutes(db, guard), ...planningRoutes(db), ...inviteRoutes(db, track), ...vendorRoutes(db, guard, partner), ...siteRoutes(db, guard),
-    ...bookingRoutes(db, guard, partner), ...billingRoutes(db, guard, partner), ...notificationRoutes(db), ...feedbackRoutes(db, guard) };
+    ...bookingRoutes(db, guard, partner), ...billingRoutes(db, guard, partner), ...notificationRoutes(db), ...feedbackRoutes(db, guard), ...ratingRoutes(db, guard) };
   const patterns = Object.keys(routes).map(k => { const [method, p] = k.split(' '); return { method, re: new RegExp('^' + p.replace(/:(\w+)/g, '([^/]+)') + '$'), fn: routes[k] }; });
   // Literal paths win over parameter paths (e.g. /api/vendors/... before /api/vendors/:id).
   patterns.sort((a, b) => (a.re.source.includes('([^/]+)') ? 1 : 0) - (b.re.source.includes('([^/]+)') ? 1 : 0));

@@ -51,7 +51,7 @@
   }
 
   // ---------- main ----------
-  const TABS = [['overview','Overview'],['vendors','Providers'],['bookings','Bookings'],['order','Listing order'],['finance','Commission & payments'],['plans','Provider plans'],['reviews','Reviews & reports'],['feedback','Feedback'],['requests','Requests'],['events','Plans'],['users','Accounts'],['leads','Leads'],['website','Website'],['categories','Categories'],['catalog','3D catalog'],['kb','Knowledge'],['ai','Assistant chats'],['activity','Activity'],['integrations','Integrations']];
+  const TABS = [['overview','Overview'],['vendors','Providers'],['bookings','Bookings'],['order','Listing order'],['finance','Commission & payments'],['plans','Provider plans'],['reviews','Reviews & reports'],['feedback','Feedback & ratings'],['requests','Requests'],['events','Plans'],['users','Accounts'],['leads','Leads'],['website','Website'],['categories','Categories'],['catalog','3D catalog'],['kb','Knowledge'],['ai','Assistant chats'],['activity','Activity'],['integrations','Integrations']];
   let tab = 'overview';
   async function renderApp() {
     const top = h('header', { class: 'top' },
@@ -380,21 +380,29 @@
             r.target_type === 'review' ? h('button', { class: 'btn danger', type: 'button', text: 'Hide the review', on: { click: async () => { await call('POST', `/api/admin/reviews/${r.target_id}`, { status: 'hidden', note: 'Report ' + r.id }); toast('Review hidden'); } } }) : '',
             target && target.booking_id ? h('button', { class: 'btn ghost', type: 'button', text: 'Open booking', on: { click: () => { d.remove(); openBooking(target.booking_id); } } }) : r.target_type === 'booking' ? h('button', { class: 'btn ghost', type: 'button', text: 'Open booking', on: { click: () => { d.remove(); openBooking(r.target_id); } } }) : '')); })),
       h('div', { class: 'card' }, h('h3', { text: 'Reviews' }), h('p', { class: 'muted', text: 'Only customers with a completed booking can review, once per booking. You can hide a review that breaks the rules; you can’t edit it.' }),
-        table([['vendor_name', 'Provider'], ['rating', 'Rating', r => '★'.repeat(r.rating)], ['body', 'Review'], ['author_name', 'By'], ['ref', 'Booking'], ['status', 'Status'], ['act', '', r => h('button', { class: 'btn ghost', type: 'button', text: r.status === 'hidden' ? 'Publish' : 'Hide', on: { click: async e => { e.stopPropagation(); await call('POST', `/api/admin/reviews/${r.id}`, { status: r.status === 'hidden' ? 'published' : 'hidden' }); toast('Saved'); renderApp(); } } })]], reviews)));
+        table([['vendor_name', 'Provider'], ['rating', 'Rating', r => '★'.repeat(r.rating)], ['body', 'Review'], ['author_name', 'By'], ['ref', 'Booking', r => r.ref || 'Customer rating (no booking)'], ['status', 'Status'], ['act', '', r => h('button', { class: 'btn ghost', type: 'button', text: r.status === 'hidden' ? 'Publish' : 'Hide', on: { click: async e => { e.stopPropagation(); await call('POST', `/api/admin/reviews/${r.id}`, { status: r.status === 'hidden' ? 'published' : 'hidden' }); toast('Saved'); renderApp(); } } })]], reviews)));
   }
 
   // ---------- website feedback ----------
   let fbStatus = 'new', fbKind = '';
   const FB_KIND = { idea: 'Idea', problem: 'Problem', praise: 'Compliment', other: 'Other' }, FB_STATUS = { new: 'New', read: 'Read', done: 'Done', spam: 'Spam', all: 'All' };
   async function viewFeedback(main) {
-    const { feedback, counts, rating } = await call('GET', `/api/admin/feedback?status=${fbStatus}${fbKind ? '&kind=' + fbKind : ''}`);
+    const [{ feedback, counts, rating }, rt] = await Promise.all([call('GET', `/api/admin/feedback?status=${fbStatus}${fbKind ? '&kind=' + fbKind : ''}`), call('GET', '/api/admin/ratings')]);
     const statusTabs = h('div', { class: 'tabs', role: 'group', 'aria-label': 'Status' }, ...Object.entries(FB_STATUS).map(([k, l]) => h('button', { class: 'tab', type: 'button', 'aria-pressed': String(fbStatus === k), text: k === 'all' ? l : `${l} (${counts[k] || 0})`, on: { click: () => { fbStatus = k; renderApp(); } } })));
     const kindSel = h('select', { 'aria-label': 'Kind', on: { change: e => { fbKind = e.target.value; renderApp(); } } }, h('option', { value: '', text: 'Any kind' }), ...Object.entries(FB_KIND).map(([k, l]) => h('option', { value: k, text: l, selected: fbKind === k })));
-    main.append(h('div', { class: 'kpis' }, ...[['New', counts.new || 0], ['Read', counts.read || 0], ['Done', counts.done || 0], ['Average rating', rating.average == null ? '—' : `${rating.average} / 5`], ['Ratings given', rating.count]].map(([l, n]) => h('div', { class: 'kpi' }, h('b', { text: n }), h('span', { text: l })))),
+    main.append(h('div', { class: 'kpis' }, ...[['New', counts.new || 0], ['Read', counts.read || 0], ['Done', counts.done || 0], ['Feedback: average stars', rating.average == null ? '—' : `${rating.average} / 5`], ['Feedback with stars', rating.count]].map(([l, n]) => h('div', { class: 'kpi' }, h('b', { text: n }), h('span', { text: l })))),
       h('div', { class: 'card' }, h('div', { class: 'row' }, h('h3', { text: 'Website feedback' }), statusTabs, kindSel),
         h('p', { class: 'muted', text: 'Sent from the “Send feedback” page on the website. Click a row to read it, add a note and mark it read, done or spam.' }),
         table([['created_at', 'When', r => fmt(r.created_at)], ['kind', 'Kind', r => h('span', { class: 'badge' + (r.kind === 'problem' ? ' spam' : r.kind === 'praise' ? ' booked' : r.kind === 'idea' ? ' new' : ''), text: FB_KIND[r.kind] || r.kind })], ['rating', 'Rating', r => r.rating ? '★'.repeat(r.rating) : '—'],
           ['message', 'Feedback', r => r.message.length > 140 ? r.message.slice(0, 140) + '…' : r.message], ['page', 'Page', r => r.page || '—'], ['from', 'From', r => r.email || r.user_email || 'Anonymous'], ['status', 'Status', r => h('span', { class: 'badge' + (r.status === 'new' ? ' new' : r.status === 'done' ? ' booked' : r.status === 'spam' ? ' spam' : ''), text: FB_STATUS[r.status] || r.status })]], feedback, openFeedback)));
+    const st = (a, n) => n ? `${'★'.repeat(Math.round(a))}${'☆'.repeat(5 - Math.round(a))} ${a.toFixed(1)} (${n})` : '—';
+    main.append(
+      h('div', { class: 'card' }, h('h3', { text: 'Customers’ own events' }), h('p', { class: 'muted', text: `After their event date, customers rate how it went. Only the customer and admins see this. Average: ${st(rt.eventsSummary.average || 0, rt.eventsSummary.count)}` }),
+        table([['rated_at', 'Rated', r => fmt(r.rated_at)], ['name', 'Plan'], ['event_type', 'Type'], ['event_date', 'Event date'], ['rating', 'Rating', r => '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating)], ['rating_comment', 'Comment', r => r.rating_comment || '—'], ['user_email', 'Customer', r => `${r.user_name || ''} ${r.user_email || ''}`.trim()]], rt.events)),
+      h('div', { class: 'card' }, h('h3', { text: 'Event types (Events page)' }), h('p', { class: 'muted', text: 'Public averages shown under each event type. Signed-in customers rate each type once and can change it.' }),
+        table([['eventType', 'Event type'], ['average', 'Rating', r => st(r.average, r.count)]], rt.eventTypes)),
+      h('div', { class: 'card' }, h('h3', { text: 'Providers' }), h('p', { class: 'muted', text: 'Published ratings per provider. “Verified” counts come from completed bookings. Hide or publish single ratings in Reviews & reports.' }),
+        table([['name', 'Provider'], ['average', 'Rating', r => st(r.average, r.count)], ['verified', 'Verified bookings']], rt.vendors)));
   }
   function openFeedback(r) {
     const note = h('textarea', { rows: '3', maxlength: '1000', placeholder: 'Private note for the team (optional)' }); note.value = r.admin_note || '';
